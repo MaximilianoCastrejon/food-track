@@ -57,7 +57,6 @@ export const buildPagination = async (query, pagParams) => {
 export const buildProjection = (onlyShow) => {
   if (onlyShow) {
     return onlyShow.split(",").join(" ");
-    l;
   }
   return "";
 };

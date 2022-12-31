@@ -5,7 +5,11 @@ import {
   deleteProduct,
   getProductById,
   updateProduct,
+  getAllCategories,
+  getCategory,
   createCategory,
+  updateCategory,
+  deleteCategory,
 } from "../controllers/client.js";
 
 const router = express.Router();
@@ -16,5 +20,10 @@ router
   .delete(deleteProduct)
   .patch(updateProduct)
   .get(getProductById);
-router.route("/products/categories").post(createCategory);
+router.route("/products/categories").get(getAllCategories).post(createCategory);
+router
+  .route("/products/categories/:id")
+  .get(getCategory)
+  .patch(updateCategory)
+  .delete(deleteCategory);
 export default router;

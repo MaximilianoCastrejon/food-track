@@ -119,9 +119,22 @@ export const updateProduct = (req, res) => {
   res.status(StatusCodes.OK).send("Ok");
 };
 
+// Categories
+export const getAllCategories = async (req, res) => {
+  res.status(StatusCodes.OK).send({ category });
+};
+export const getCategory = async (req, res) => {
+  res.status(StatusCodes.OK).send({ category });
+};
 export const createCategory = async (req, res) => {
   const { name, hasSizes } = req.body;
   const category = await Category.create({ name: name, hasSizes: hasSizes });
 
+  res.status(StatusCodes.OK).send({ category });
+};
+export const updateCategory = async (req, res) => {
+  res.status(StatusCodes.OK).send({ category });
+};
+export const deleteCategory = async (req, res) => {
   res.status(StatusCodes.OK).send({ category });
 };
