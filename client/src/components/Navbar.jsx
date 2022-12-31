@@ -75,7 +75,7 @@ function Navbar({ user, isSidebarOpen, setIsSidebarOpen }) {
                 justifyContent: "space-between",
                 alignItems: "center",
                 textTransform: "none",
-                gap: "1rem",
+                gap: "2rem",
               }}
             >
               <Box
