@@ -1,31 +1,47 @@
 import mongoose from "mongoose";
+import InventoryItem from "../Inventories/InventoryItem.js";
+import InventoryType from "../Inventories/InventoryType.js";
 
-const ProductSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
+const ProductSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      unique: true,
+      index: {
+        unique: true,
+        collation: {
+          locale: "en",
+          strength: 1,
+        },
+      },
+    },
+    description: {
+      type: String,
+      required: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  description: {
-    type: String,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  { strictPopulate: false }
+);
 
 // product + size -> PK
+// Product price calculations
 const ProductSizeSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
+    unique: true,
   },
   size: {
     type: String,
     enum: ["small", "medium", "large", "fixed"],
     required: true,
+    unique: true,
   },
   price: {
     type: Number,
@@ -33,6 +49,8 @@ const ProductSizeSchema = new mongoose.Schema({
   },
 });
 
+// Statistical analysis
+// Registration of products from category
 const ProductCategorySchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
@@ -46,52 +64,49 @@ const ProductCategorySchema = new mongoose.Schema({
   },
 });
 
-// const IngredientSchema = new mongoose.Schema({
-//   name: {
-//     type: String,
-//     required: true,
-//   },
-//   createdAt: {
-//     type: Date,
-//     default: Date.now,
-//   },
-// });
-
+// Inventory updating
 const ProductIngredientSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
+    unique: true,
+    sparse: true,
   },
   ingredient: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "RawIngredient",
+    ref: "InventoryItem",
     required: true,
+    unique: true,
+    sparse: true,
+    validate: {
+      validator: async function (id) {
+        const item = await InventoryItem.findById(id);
+        if (!item) {
+          return false;
+        }
+        const type = await InventoryType.findById(item.type);
+        if (!type) {
+          return false;
+        }
+        return type.name === "ingredient";
+      },
+      message:
+        "The item is not of type 'ingredient'. Please create at least one in the 'inventory' section unser 'management'",
+    },
   },
   quantity: {
     small: {
       type: Number,
-      required: function () {
-        return this.product.category.hasSizes === true;
-      },
     },
     medium: {
       type: Number,
-      required: function () {
-        return this.product.category.hasSizes === true;
-      },
     },
     large: {
       type: Number,
-      required: function () {
-        return this.product.category.hasSizes === true;
-      },
     },
     fixed: {
       type: Number,
-      required: function () {
-        return this.product.category.hasSizes === false;
-      },
     },
   },
 });
@@ -193,6 +208,12 @@ const ProductIngredientSchema = new mongoose.Schema({
 //   next();
 // });
 
+ProductSchema.pre("remove", async function () {
+  await ProductSize.findOneAndDelete({ product: this._id });
+  await ProductCategory.findOneAndDelete({ product: this._id });
+  await ProductIngredient.deleteMany({ product: this._id });
+});
+
 const Product = mongoose.model("Product", ProductSchema);
 const ProductSize = mongoose.model("ProductSize", ProductSizeSchema);
 const ProductCategory = mongoose.model(
@@ -203,9 +224,4 @@ const ProductIngredient = mongoose.model(
   "ProductIngredient",
   ProductIngredientSchema
 );
-export default {
-  Product,
-  ProductSize,
-  ProductCategory,
-  ProductIngredient,
-};
+export { Product, ProductSize, ProductCategory, ProductIngredient };

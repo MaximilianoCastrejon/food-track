@@ -24,5 +24,5 @@ const ProductStatSchema = mongoose.Schema(
   { timestamps: true }
 );
 
-const ProductStat = mongoose.model("ProductStat", ProductStatSchema);
-export default ProductStat;
+// const ProductStat = mongoose.model("ProductStat", ProductStatSchema);
+// export default ProductStat;

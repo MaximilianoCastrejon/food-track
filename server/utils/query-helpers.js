@@ -1,11 +1,11 @@
-import Product from "../models/Product.js";
+import { Product } from "../models/Products/Product.js";
 
 export const buildQuery = (queryParams) => {
   const { name, nameOptions, category, numericFields } = queryParams;
   const query = {};
   //  STRING FIELDS
   if (category) {
-    query.category = category;
+    query.productCategory.category.name = category;
   }
   // TODO: Implement search algorithm for name for search prediction
   if (name) {

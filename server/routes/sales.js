@@ -1,8 +1,16 @@
 import express from "express";
-import { getSales, getUserSales } from "../controllers/sales.js";
+import * as salesController from "../controllers/sales.js";
 const router = express.Router();
 
-router.route("/").get(getSales).post(); //Routes that do not require params
-router.route("/id").get(getUserSales).patch().delete();
+router
+  .route("/orders")
+  .get(salesController.getAllOrders)
+  .post(salesController.createOrder);
+router.route("/orders/:id").patch(salesController.updateOrder);
+
+router.route("/orders/:orderId/packages/:packageId/products/:productId").post();
+
+router.route("/").get().post();
+router.route("/:id").get().patch().delete();
 
 export default router;

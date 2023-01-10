@@ -4,6 +4,14 @@ const CategorySchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
+    unique: true,
+    index: {
+      unique: true,
+      collation: {
+        locale: "en",
+        strength: 1,
+      },
+    },
   },
   hasSizes: {
     type: Boolean,

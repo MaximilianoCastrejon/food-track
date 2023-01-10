@@ -45,6 +45,29 @@ const Product = ({
   );
 };
 
+// TODO: write a pop-up that opens a menu on a button click
+// and sends the returned values from a request as props
+// import React from 'react';
+// import { Route } from 'react-router-dom';
+// import ProductFormModal from './ProductFormModal';
+
+// const ProductsRoute = () => {
+//   const ingredients = [
+//     { name: 'lettuce', _id: '1' },
+//     { name: 'tomatoes', _id: '2' },
+//     { name: 'onions', _id: '3' }
+//   ];
+
+//   return (
+//     <Route
+//       path="/products/new"
+//       render={(props) => <ProductFormModal {...props} ingredients={ingredients} categories={categories} ingredients={ingredients} />}
+//     />
+//   );
+// };
+
+// export default ProductsRoute;
+
 function Products() {
   const { data, isLoading } = useGetProductsQuery();
   const isNonMobile = useMediaQuery("(min-width: 1000px)");
