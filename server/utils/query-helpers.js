@@ -78,6 +78,7 @@ export const applyProjection = (result, onlyShow) => {
   }
   return result;
 };
+
 export const applyPagination = (result, pagination) => {
   result = result.skip(pagination.skip).limit(pagination.limit);
   return result;

@@ -17,69 +17,70 @@ import mongoose from "mongoose";
 
 export const getProducts = async (req, res) => {
   const {
-    prodName,
+    name,
     nameOptions,
     description,
     descriptionOptions,
     projection,
     sort,
-    category,
-    categoryOptions,
-    ingredient,
-    ingredientOptions,
-    ingredientNumFields,
-    size,
-    sizeNumFields,
+    // category,
+    // categoryOptions,
+    // ingredient,
+    // ingredientOptions,
+    // ingredientNumFields,
+    // size,
+    // sizeNumFields,
     page,
     offset,
   } = req.query;
 
-  // const query = buildQuery(req.query);
-  // const pagination = await buildPagination(query, req.query);
-  // const projection = buildProjection(onlyShow);
+  const stringParams = [];
+  if (name) {
+    stringParams.push({ name, nameOptions });
+  }
+  if (description) {
+    stringParams.push({ description, descriptionOptions });
+  }
 
-  // let result = Product.find(query);
-  const queryProduct = buildQuery(
+  const queryProducts = await buildQuery(
     Product,
-    { queryParams: { prodName, nameOptions, description } },
-    { projection: projection, sort: sort, pagination: { page, offset } }
+    {
+      stringParams,
+    },
+    { projection: projection, pagination: { page: page, limit: offset } }
   );
-  let result = Product.find({});
-  // result = applySorting(result, sort);
-  // result = applyProjection(result, projection);
-  // result = applyPagination(result, pagination);
 
-  const products = await result;
-  // const productsData = await Promise.all(
-  //   products.map(async (product) => {
-  //     const category = await ProductCategory.findOne({
-  //       product: product._id,
-  //     })
-  //       .select("-product")
-  //       .populate("category");
-  //     const ingredients = await ProductIngredient.find({
-  //       product: product._id,
-  //     })
-  //       .select("-product")
-  //       .populate("ingredient");
-  //     const prices = await ProductSize.find({ product: product._id }).select(
-  //       "-product"
-  //     );
+  const productsData = await Promise.all(
+    queryProducts.map(async (product) => {
+      const category = await ProductCategory.findOne({
+        product: product._id,
+      })
+        .select("-product")
+        .populate("category");
+      const ingredients = await ProductIngredient.find({
+        product: product._id,
+      })
+        .select("-product")
+        .populate("ingredient");
+      const prices = await ProductSize.find({ product: product._id }).select(
+        "-product"
+      );
 
-  //     return {
-  //       product,
-  //       category,
-  //       ingredients,
-  //       prices,
-  //     };
-  //   })
-  // );
+      return {
+        product,
+        category,
+        ingredients,
+        prices,
+      };
+    })
+  );
 
   // const totalDocuments = await Product.countDocuments();
   // const totalPages = Math.ceil(totalDocuments / pagination.limit);
 
   res.status(StatusCodes.OK).json({
-    products,
+    productsData,
+    // products,
     // productsData,
     // totalDocuments,
   });
@@ -197,22 +198,69 @@ export const deleteProduct = (req, res) => {
 };
 
 export const updateProduct = async (req, res) => {
-  const { product, size, ingredients, category } = req.body;
+  const { product, sizes, ingredients, category, categorySizes } = req.body;
 
   const updatedObject = {};
 
   if (product) {
-    updatedObject.product = await Product.findByIdAndUpdate(req.params.id, {
-      name: product.name,
-      description: product.description,
-    });
+    updatedObject.product = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: product.name,
+        description: product.description,
+      },
+      { new: true }
+    );
+    if (!updatedObject.product) {
+      throw new NotFoundError("No product was found with that ID");
+    }
   }
 
+  //   const category = "5f9a35d33b39c9079c2b2f7a";
+  // const sizes = [
+  //   { name: "small", price: 4.99 },
+  //   { name: "medium", price: 6.99 },
+  //   { name: "large", price: 8.99 }
+  // ];
+
   if (category) {
+    //get the category information
+    const newCategory = await Category.findById(category);
+    if (newCategory) {
+      throw new NotFoundError("Not category was found with that ID");
+    }
+    //get the old category information
+    const oldCategory = await ProductCategory.findOne({
+      product: req.params.id,
+    });
+    if (oldCategory) {
+      throw new NotFoundError("No match of that product was found");
+    }
+    const categoryResult = await Category.findById(oldCategory.category);
+    if (newCategory.hasSizes !== categoryResult.hasSizes) {
+      if (newCategory.hasSizes) {
+        //if the new category has sizes validate the sizes array
+        if (!Array.isArray(categorySizes) || categorySizes.length !== 3) {
+          throw new BadRequestError(
+            "Expected an array of 3 values for categorySizes property"
+          );
+        }
+      } else {
+        //if the new category doesn't have categorySizes validate the categorySizes array
+        if (!Array.isArray(categorySizes) || categorySizes.length !== 1) {
+          throw new BadRequestError(
+            "Expected only 1 'fixed' size for the categorySizes property"
+          );
+        }
+      }
+    }
+    updateCategorySizes(newCategory, req.params.id, categorySizes);
     updatedObject.categories = await ProductCategory.updateOne(
       { product: req.params.id },
-      { category: category }
+      { category: category },
+      { new: true }
     );
+    console.log("updatedObject", updatedObject);
     if (!updatedObject.categories) {
       throw new NotFoundError(
         "No product with that category was found in the Product category table"
@@ -220,40 +268,135 @@ export const updateProduct = async (req, res) => {
     }
   }
 
-  if (size) {
-    updatedObject.size = await ProductSize.updateOne(
-      { product: req.params.id, size: size.size },
-      { size: size.price }
-    );
-    if (!updatedObject.size) {
-      throw new NotFoundError(
-        "Not found in Product size table. Check the product id or size you are correct"
-      );
-    }
-  }
-
-  if (ingredients) {
-    updatedObject.ingredient = await ProductIngredient.updateMany(
-      { product: req.params.id, ingredient: ingredients.original },
-      {
-        $set: { ingredient: ingredients.new, quantity: ingredients.quantities },
+  async function updateCategorySizes(newCategory, productId, sizes) {
+    if (sizes) {
+      if (newCategory.hasSizes) {
+        //update sizes and prices for each size
+        await Promise.all(
+          sizes.map(async (size) => {
+            await ProductSize.updateOne(
+              { product: productId, size: size.name },
+              { $set: { price: size.price } }
+            );
+          })
+        );
+      } else {
+        //update only the fixed size
+        await ProductSize.updateOne(
+          { product: productId, size: "fixed" },
+          { $set: { price: sizes[0].price } }
+        );
       }
-    );
-    if (!updatedObject.ingredient) {
-      throw new NotFoundError(
-        "No product with that ingredients was found in the Product ingredients table"
-      );
     }
   }
 
+  const newSizes = [];
+  if (sizes) {
+    const productCategory = await ProductCategory.findById(req.params.id);
+    const category = await Category.findById(productCategory.category);
+    if (category.hasSizes) {
+      //validate the sizes array
+      if (!Array.isArray(sizes) || sizes.length !== 3) {
+        throw new BadRequestError(
+          "Expected an array of 3 values for sizes property"
+        );
+      }
+    } else {
+      //validate the sizes array
+      if (!Array.isArray(sizes) || sizes.length !== 1) {
+        throw new BadRequestError(
+          "Expected only 1 'fixed' size for the sizes property"
+        );
+      }
+    }
+    updateSizesAndPrices(category, req.params.id, sizes);
+  }
+
+  async function updateSizesAndPrices(category, productId, sizes) {
+    if (category.hasSizes) {
+      //update sizes and prices for each size
+      await Promise.all(
+        sizes.map(async (size) => {
+          await ProductSize.updateOne(
+            { product: productId, size: size.name },
+            { $set: { price: size.price } }
+          );
+        })
+      );
+    } else {
+      //update only the fixed size
+      await ProductSize.updateOne(
+        { product: productId, size: "fixed" },
+        { $set: { price: sizes[0].price } }
+      );
+    }
+  }
+  // if (sizes) {
+  //   const productCategory = ProductCategory.findById(req.params.id);
+  //   const category = Category.findById(productCategory.category);
+  //   updateSizesAndPrices(category , req.params.id, sizes)
+  // }
+  //   await Promise.all(sizes.map(async (size, price) => {
+  //     console.log("prices", price)
+  //     if(!price){
+  //       throw
+  //     }
+  //     if(size.fixed){
+  //       await ProductSize.deleteMany({product: req.params.id, size: {$in: ["small", "medium", "large"]}})
+  //     }
+  //     // if(Object.entries(size).forEach(([key, value]) => {key==="fixed"})){
+  //     //   await ProductSize.deleteMany({product: req.params.id, size: {$in: ["small", "medium", "large"]}})
+  //     // }
+  //     i
+  //   }))
+  //   updatedObject.size = await ProductSize.updateOne(
+  //     { product: req.params.id, size: size.size },
+  //     { size: size.price }
+  //   );
+  //   if (!updatedObject.size) {
+  //     throw new NotFoundError(
+  //       "Not found in Product size table. Check the product id or size you are correct"
+  //     );
+  //   }
+  // }
+
+  const newIngredientsArr = [];
+  if (ingredients) {
+    await Promise.all(
+      ingredients.map(async (ingredient) => {
+        if (!ingredient.original) {
+          throw new BadRequestError(
+            "ID of ingredient to update was not provided"
+          );
+        }
+        const setObject = {};
+        if (ingredient.new) {
+          setObject.ingredient = ingredient.new;
+        }
+        if (ingredient.quantities) {
+          setObject.quantity = ingredient.quantities;
+        }
+        const newIngredient = await ProductIngredient.findOneAndUpdate(
+          { product: req.params.id, ingredient: ingredient.original },
+          {
+            $set: setObject,
+          },
+          { new: true }
+        );
+        if (!newIngredient) {
+          throw new NotFoundError(
+            "No product with that ingredients was found in the Product ingredients table"
+          );
+        }
+        newIngredientsArr.push(newIngredient);
+      })
+    );
+  }
+  if (ingredients) {
+    updatedObject.ingredients = newIngredientsArr;
+  }
   res.status(StatusCodes.OK).send(updatedObject);
 };
-
-/********************************* PRODUCT INGREDIENTS *********************************/
-
-export const getAllProductIngredients = (req, res) => {};
-
-/********************************* PRODUCT SIZES *********************************/
 
 /********************************* CATEGORIES *********************************/
 

@@ -1,18 +1,24 @@
 export const buildQuery = async (
   collection,
-  { queryParams, numQuery },
-  { projection, sort, pagination }
+  { stringParams, numQuery },
+  { projection, sort, pagination, populate }
 ) => {
-  console.log("queryParams", queryParams);
-  console.log("numQuery", numQuery);
-  console.log("projection", projection);
-  console.log("sort", sort);
-  console.log("pagination", pagination);
-  // Initialize the query object
-  if (projection) {
-    const show = projection.split(",").join(" ");
-    query = query.select(show);
-  }
+  const queryObject = {};
+
+  stringParams.forEach((obj) => {
+    Object.entries(obj).forEach(([key, value]) => {
+      const match = key.match(/(.*)Options/);
+      if (match) {
+        const field = match[1];
+        queryObject[field] = { $regex: obj[field] };
+        if (key.endsWith("Options")) {
+          queryObject[field]["$options"] = value ? value : "";
+        }
+      }
+    });
+  });
+
+  let result = collection.find(queryObject);
 
   if (numQuery) {
     const operatorMap = {
@@ -30,11 +36,15 @@ export const buildQuery = async (
     filters = filters.split(",").forEach((item) => {
       const [field, operator, filterValue] = item.split("-");
       if (numQuery.options.includes(field)) {
-        query[field] = { [operator]: Number(filterValue) };
+        queryObject[field] = { [operator]: Number(filterValue) };
       }
     });
   }
 
+  if (projection) {
+    const show = projection.split(",").join(" ");
+    result = result.select(show);
+  }
   if (sort) {
     const sortList = sort.split(",").join(" ");
     result = result.sort(sortList);
@@ -43,19 +53,24 @@ export const buildQuery = async (
   }
 
   if (pagination) {
-    result = result.skip(pagination.skip).limit(pagination.limit);
+    const page = Number(pagination.page) || 1;
+    const limit = Number(pagination.limit) || 10;
+
+    // Solutions: Use two queries || use a function inbetween facets of the pipeline to get totalDocuments
+    const totalDocuments = await collection.countDocuments(queryObject);
+    const totalPages =
+      Math.ceil(totalDocuments / limit) === 0
+        ? 1
+        : Math.ceil(totalDocuments / limit);
+
+    const toPage =
+      limit * (page <= totalPages ? (page < 1 ? 0 : page - 1) : totalPages - 1);
+    result = result.skip(toPage).limit(limit);
     return result;
   }
-  // Loop through the query parameters
-  Object.keys(queryParams).forEach((key) => {
-    // Check if the key is a valid field in the collection
-    if (collection.schema.path(key)) {
-      // Add the query condition for the field
-      query = query.where(key, queryParams[key]);
-    }
-  });
-  let query = await collection.find({});
+
+  const orderedResult = await result;
 
   // Return the built query
-  return query;
+  return orderedResult;
 };

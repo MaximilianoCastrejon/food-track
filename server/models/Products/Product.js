@@ -183,33 +183,8 @@ const ProductIngredientSchema = new mongoose.Schema({
 //   },
 // });
 
-// ProductSchema.pre("save", function (next) {
-//   // Decrement the quantity of each ingredient in the inventory when a product is ordered
-//   this.ingredients.forEach((ingredient) => {
-//     const reduce_by = this.ingredients.map((item) => {
-//       const { ingredient, quantity } = item;
-
-//       Ingredient.findByIdAndUpdate(
-//         ingredient._id,
-//         { $inc: { quantity: -quantity } },
-//         (err, updatedIngredient) => {
-//           if (err) {
-//             return next(err);
-//           }
-//           if (!updatedIngredient) {
-//             return next(
-//               new Error(`Ingredient with id ${ingredient} not found`)
-//             );
-//           }
-//         }
-//       );
-//     });
-//   });
-//   next();
-// });
-
 ProductSchema.pre("remove", async function () {
-  await ProductSize.findOneAndDelete({ product: this._id });
+  await ProductSize.deleteMany({ product: this._id });
   await ProductCategory.findOneAndDelete({ product: this._id });
   await ProductIngredient.deleteMany({ product: this._id });
 });
