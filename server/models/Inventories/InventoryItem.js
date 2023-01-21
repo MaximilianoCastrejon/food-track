@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { ProductIngredient } from "../Products/Product.js";
 import InventoryHistory from "./InventoryHistory.js";
 
+// Display as columns. Y axis = units, X axis = all
 const InventoryItemSchema = mongoose.Schema({
   name: String,
   type: {
@@ -10,6 +11,7 @@ const InventoryItemSchema = mongoose.Schema({
     required: true,
   },
   unitOfMeasurement: String,
+  currentLevel: Number,
   thresholdLevel: Number,
 });
 

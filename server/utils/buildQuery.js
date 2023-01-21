@@ -4,22 +4,22 @@ export const buildQuery = async (
   { projection, sort, pagination, populate }
 ) => {
   const queryObject = {};
-
-  stringParams.forEach((obj) => {
-    Object.entries(obj).forEach(([key, value]) => {
-      const match = key.match(/(.*)Options/);
-      if (match) {
-        const field = match[1];
-        queryObject[field] = { $regex: obj[field] };
-        if (key.endsWith("Options")) {
-          queryObject[field]["$options"] = value ? value : "";
+  if (stringParams) {
+    stringParams.forEach((obj) => {
+      Object.entries(obj).forEach(([key, value]) => {
+        const match = key.match(/(.*)Options/);
+        if (match) {
+          const field = match[1];
+          queryObject[field] = { $regex: obj[field] };
+          if (key.endsWith("Options")) {
+            queryObject[field]["$options"] = value ? value : "";
+          }
         }
-      }
+      });
     });
-  });
+  }
 
-  let result = collection.find(queryObject);
-
+  // Give option for range queryObject.createdAt: { $gte: period.from, $lte: period.to }
   if (numQuery) {
     const operatorMap = {
       ">": "$gt",
@@ -31,15 +31,29 @@ export const buildQuery = async (
     const filterOperator = /\b(<|<=|=|>=|>)\b/g;
     let filters = numQuery.numericFilters.replace(
       filterOperator,
-      (operator) => `-${operatorMap[operator]}-`
+      (operator) => `_${operatorMap[operator]}_`
     );
-    filters = filters.split(",").forEach((item) => {
-      const [field, operator, filterValue] = item.split("-");
+    const from_fields = new Set();
+    filters.split(",").forEach((item) => {
+      const [field, operator, filterValue] = item.split("_");
       if (numQuery.options.includes(field)) {
-        queryObject[field] = { [operator]: Number(filterValue) };
+        // If appeard before
+        if (from_fields.has(field)) {
+          queryObject[field] = {
+            ...queryObject[field],
+            [operator]: Number(filterValue),
+          };
+        } else {
+          //how can I send two dates in my req.query
+          queryObject[field] = { [operator]: Number(filterValue) };
+        }
+
+        from_fields.add(field);
       }
     });
   }
+
+  let result = collection.find(queryObject);
 
   if (projection) {
     const show = projection.split(",").join(" ");
@@ -69,6 +83,10 @@ export const buildQuery = async (
     return result;
   }
 
+  if (populate) {
+    const pop = populate.split(",").join(" ");
+    result = result.populate(pop);
+  }
   const orderedResult = await result;
 
   // Return the built query

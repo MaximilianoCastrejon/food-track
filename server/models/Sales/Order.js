@@ -11,7 +11,6 @@ const OrderSchema = new mongoose.Schema(
         product: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Product",
-          unique: true,
           required: function () {
             return !this.packages || this.packages.length === 0;
           },
@@ -42,7 +41,6 @@ const OrderSchema = new mongoose.Schema(
           type: String,
           enum: ["small", "medium", "large", "fixed"],
           required: true,
-          unique: true,
         },
       },
     ],
@@ -52,7 +50,6 @@ const OrderSchema = new mongoose.Schema(
           package: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "PackageOption",
-            unique: true,
             required: function () {
               return !this.products || this.products.length === 0;
             },
@@ -63,7 +60,6 @@ const OrderSchema = new mongoose.Schema(
                 product: {
                   type: mongoose.Schema.Types.ObjectId,
                   ref: "Product",
-                  unique: true,
                   required: true,
                 },
                 quantity: {
@@ -92,7 +88,6 @@ const OrderSchema = new mongoose.Schema(
                   type: String,
                   enum: ["small", "medium", "large", "fixed"],
                   required: true,
-                  unique: true,
                 },
               },
             ],
@@ -102,11 +97,22 @@ const OrderSchema = new mongoose.Schema(
             default: 0,
             required: true,
           },
-          excludedIngredients: [
-            {
-              type: String,
+          excludedIngredients: {
+            type: [mongoose.Schema.Types.ObjectId],
+            ref: "InventoryItem",
+            validate: {
+              validator: async function (id) {
+                // Check that the name field of each excluded ingredient is equal to "ingredient"
+                const excludedIngredients = await InventoryItem.find({
+                  _id: { $in: id },
+                  name: "ingredient",
+                });
+                return excludedIngredients.length === id.length;
+              },
+              message:
+                "One or more of the excluded ingredients does not have a name equal to 'ingredient'",
             },
-          ],
+          },
         },
       ],
     },

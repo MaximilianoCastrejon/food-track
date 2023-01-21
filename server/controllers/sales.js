@@ -11,6 +11,8 @@ import {
 import PackageOption from "../models/Products/PackageOption.js";
 import mongoose from "mongoose";
 import { NotFoundError } from "../errors/not-found.js";
+import { BadRequestError } from "../errors/bad-request.js";
+import InventoryItem from "../models/Inventories/InventoryItem.js";
 
 /********************************* ORDERS *********************************/
 
@@ -28,13 +30,73 @@ export const getOrderAndOwner = async (req, res) => {
 export const createOrder = async (req, res) => {
   const { products, packages, extras, customerId } = req.body;
 
+  if (!customerId) {
+    throw new BadRequestError("Select which customer made this order");
+  }
   const orderObject = {};
-
   const session = await mongoose.startSession();
+  // MONEY
+  // Find customer discount
+  // Register transaction: Customer, order, pacakge, extras, products price
+  // Update Income, Account
+  // Decrease Inventory Item
+  // Update loyalty status
 
   session.startTransaction();
   try {
     const order = Order.create(orderObject, { session });
+    console.log("productsValue", productsValue);
+    ProductSize.find({});
+    let valueOfProducts;
+    let valueOfPackages;
+    const transactionObj = {};
+    if (products) {
+      await Promise.all(
+        products.map(async (obj) => {
+          const productPrice = await ProductSize.findOne({
+            product: obj.product,
+            size: obj.size,
+          });
+          valueOfProducts += productPrice.price;
+
+          const productInventory = ProductIngredient.find({
+            product: obj.product,
+          });
+          productInventory.map((ingredient) => {
+            InventoryItem;
+          });
+        })
+      );
+      transactionObj.valueOfProducts = valueOfProducts;
+      await Promise.all(Product);
+    }
+    transactionObj.id = order._id;
+    if (packages) {
+      await Promise.all(
+        packages.map(async (obj) => {
+          const packageOpt = await PackageOption.findOne({
+            package: obj.package,
+          });
+          valueOfPackages += packageOpt.price;
+        })
+      );
+      transactionObj.valueOfPackages = valueOfPackages;
+    }
+
+    if (extras) {
+      await Promise.all(
+        extras.map(async (obj) => {
+          const packageOpt = await Extras.findOne({
+            ingredient: obj.ingredient,
+          });
+          valueOfPackages += packageOpt.price;
+        })
+      );
+      transactionObj.valueOfPackages = valueOfPackages;
+    }
+
+    transactionObj.valueOfOrder =
+      valueOfProducts + (await Transaction.create({ order: order._id }));
     updateInventory(order);
     updateSales();
 

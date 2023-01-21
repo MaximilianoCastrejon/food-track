@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import InventoryItem from "./InventoryItem.js";
 
 const InventoryTypeSchema = mongoose.Schema({
   name: { type: String, unique: true, required: true },

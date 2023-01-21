@@ -1,15 +1,21 @@
 import mongoose from "mongoose";
+import InventoryItem from "../Inventories/InventoryItem.js";
+import InventoryType from "../Inventories/InventoryType.js";
 
 const ExtrasSchema = new mongoose.Schema({
-  productId: {
+  ingredient: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Product",
+    ref: "InventoryItem",
     unique: true,
-  },
-  ingredientId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Ingredient",
-    unique: true,
+    validate: {
+      validator: async function (id) {
+        const item = await InventoryItem.findById(id);
+        const isIngredient = await InventoryType.findById(item.type);
+        return isIngredient.name === "ingredient";
+      },
+      message:
+        "The type of that item is not of 'ingredient' type, please provide only ingredients for Extras",
+    },
   },
   price: {
     type: Number,

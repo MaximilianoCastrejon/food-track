@@ -1,11 +1,9 @@
 import mongoose from "mongoose";
 
-// Register each day beginning inventory
-// Make business expenses table
-// (for discrepancies between total amount of ingredients used and ending inventory
-// in case some ingredients were purchased in the same day)
-// Get yesterday's ending inventory to fill out for today's beginning
-// Any difference from yesterday's to today's will be considered yesterday's waste
+// Daily registry
+
+// Items como refrescos o botellas de agua revendidos tienen ingrediente su propio nombre
+// waste and used
 const InventoryHistorySchema = mongoose.Schema(
   {
     item: {
@@ -13,14 +11,12 @@ const InventoryHistorySchema = mongoose.Schema(
       ref: "InventoryItem",
       required: true,
     },
-    unitCost: Number,
-    unitsUsed: Number,
-    purchasedUnits: Number,
     beginningInventory: Number,
     endingInventory: Number,
+    usedUnits: Number,
+    purchasedUnits: Number,
+    purchasedCost: Number,
     wastedUnits: Number,
-    wasteCost: Number,
-    thresholdLevel: Number,
   },
   { timestamp: true }
 );

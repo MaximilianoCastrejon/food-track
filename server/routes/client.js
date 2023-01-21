@@ -10,6 +10,16 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  getAllPackageOptions,
+  getPackageOption,
+  createPackageOption,
+  updatePackageOption,
+  deletePackageOption,
+  getAllExtras,
+  getExtra,
+  createExtra,
+  updateExtra,
+  deleteExtra,
 } from "../controllers/client.js";
 
 const router = express.Router();
@@ -23,12 +33,12 @@ router
 
 router.route("/products/:id/inventory").delete().patch().get();
 
-router.route("/packages").get().post();
-router.route("/packages/:id").get().patch().delete();
-
-router.route("/packages/:packageId/options/:categoryId").get().patch().delete();
-
-router.route("/products/categories").patch();
+router.route("/packages").get(getAllPackageOptions).post(createPackageOption);
+router
+  .route("/packages/:id")
+  .get(getPackageOption)
+  .patch(updatePackageOption)
+  .delete(deletePackageOption);
 
 router.route("/categories").get(getAllCategories).post(createCategory);
 router
@@ -36,4 +46,11 @@ router
   .get(getCategory)
   .patch(updateCategory)
   .delete(deleteCategory);
+
+router.route("/extras").get(getAllExtras).post(createExtra);
+router
+  .route("/extras/:id")
+  .get(getExtra)
+  .patch(updateExtra)
+  .delete(deleteExtra);
 export default router;

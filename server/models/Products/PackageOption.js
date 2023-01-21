@@ -19,7 +19,8 @@ const PackageOptionSchema = new mongoose.Schema({
         required: true,
       },
       size: {
-        type: [{ type: String, enum: ["small", "medium", "large", "fixed"] }],
+        type: String,
+        enum: ["small", "medium", "large", "fixed"],
         required: true,
       },
       maxCount: {

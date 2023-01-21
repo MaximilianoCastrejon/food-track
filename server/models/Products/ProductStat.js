@@ -1,10 +1,26 @@
 import mongoose from "mongoose";
 
 const ProductStatSchema = new mongoose.Schema({
-  productId: {
+  product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
-    required: true,
+    required: function () {
+      return !this.package && !this.extra;
+    },
+  },
+  package: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "PackageOption",
+    required: function () {
+      return !this.product && !this.extra;
+    },
+  },
+  extra: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Extras",
+    required: function () {
+      return !this.package && !this.product;
+    },
   },
   yearlySalesTotal: {
     type: Number,
@@ -44,13 +60,9 @@ const ProductStatSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
-      storeOpen: {
-        type: Boolean,
-        required: true,
-      },
     },
   ],
 });
 
-const ProductsStat = mongoose.model("ProductsStat", ProductStatSchema);
-export default ProductsStat;
+const ProductStat = mongoose.model("ProductStat", ProductStatSchema);
+export default ProductStat;
