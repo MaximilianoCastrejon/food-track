@@ -38,31 +38,6 @@ export const getProducts = async (req, res) => {
     offset,
   } = req.query;
 
-  // const stringParams = [];
-  // if (name) {
-  //   stringParams.push({ name, nameOptions });
-  // }
-  // if (description) {
-  //   stringParams.push({ description, descriptionOptions });
-  // }
-  // const arangeQuery = {};
-  // if (projection) {
-  //   arangeQuery.prjection = projection;
-  // }
-  // if (page && offset) {
-  //   arangeQuery.pagination = { page: page, limit: offset };
-  // }
-  // if (sort) {
-  //   arangeQuery.sort = sort;
-  // }
-  // const queryProducts = await buildQuery(
-  //   Product,
-  //   {
-  //     stringParams,
-  //   },
-  //   { projection: projection, pagination: { page: page, limit: offset } }
-  // );
-
   const queryObject = {};
   const stringParams = [];
   const numQuery = {};

@@ -11,14 +11,14 @@ const InventoryHistorySchema = mongoose.Schema(
       ref: "InventoryItem",
       required: true,
     },
-    beginningInventory: Number,
+    beginningInventory: { type: Number, required: true },
     endingInventory: Number,
     usedUnits: Number,
-    purchasedUnits: Number,
-    purchasedCost: Number,
     wastedUnits: Number,
-  },
-  { timestamp: true }
+    createdAt: { type: Date, default: Date.now() },
+    updatedAt: { type: Date, default: Date.now() },
+  }
+  // { timestamps: true }
 );
 
 const InventoryHistory = mongoose.model(

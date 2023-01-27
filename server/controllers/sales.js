@@ -1,5 +1,9 @@
 import { StatusCodes } from "http-status-codes";
-import { Customer } from "../models/Sales/Customer.js";
+import {
+  Customer,
+  CustomerLoyalty,
+  LoyaltyTier,
+} from "../models/Sales/Customer.js";
 import Order from "../models/Sales/Order.js";
 import Extras from "../models/Products/Extras.js";
 import {
@@ -13,6 +17,7 @@ import mongoose from "mongoose";
 import { NotFoundError } from "../errors/not-found.js";
 import { BadRequestError } from "../errors/bad-request.js";
 import InventoryItem from "../models/Inventories/InventoryItem.js";
+import Sale from "../models/Sales/Sale.js";
 
 /********************************* ORDERS *********************************/
 
@@ -42,11 +47,22 @@ export const createOrder = async (req, res) => {
   // Decrease Inventory Item
   // Update loyalty status
 
+  if (products) {
+    orderObject.products = products;
+  }
+  if (packages) {
+    orderObject.packages = packages;
+  }
+  if (extras) {
+    orderObject.extras = extras;
+  }
   session.startTransaction();
   try {
     const order = Order.create(orderObject, { session });
-    console.log("productsValue", productsValue);
-    ProductSize.find({});
+    if (!order) {
+      throw new BadRequestError("Order was not created");
+    }
+    const loyatyTier = await CustomerLoyalty.find({});
     let valueOfProducts;
     let valueOfPackages;
     const transactionObj = {};
@@ -96,7 +112,7 @@ export const createOrder = async (req, res) => {
     }
 
     transactionObj.valueOfOrder =
-      valueOfProducts + (await Transaction.create({ order: order._id }));
+      valueOfProducts + (await Sale.create({ order: order._id }));
     updateInventory(order);
     updateSales();
 
@@ -107,15 +123,7 @@ export const createOrder = async (req, res) => {
   } finally {
     session.endSession();
   }
-  // TODO: Move pre save logic here
-  await Customer.updateOne(
-    { _id: customerId },
-    {
-      $push: {
-        orders: order._id,
-      },
-    }
-  );
+
   res.status(StatusCodes.OK).json({ sales });
 };
 
@@ -271,16 +279,8 @@ export const getAllCustomers = async (req, res) => {
   const sales = await Customer.find(/* User*/);
   res.status(StatusCodes.OK).json({ sales });
 };
-// Called when assinging order to customer
-export const textPredictCustomer = async (req, res) => {
-  const customers = await Customer.find({}).select("name _id");
-  res.status(StatusCodes.OK).json(customers);
-};
+
 export const getCustomer = async (req, res) => {
-  const sales = await Customer.find(/* User*/);
-  res.status(StatusCodes.OK).json({ sales });
-};
-export const getCustomerLoyalty = async (req, res) => {
   const sales = await Customer.find(/* User*/);
   res.status(StatusCodes.OK).json({ sales });
 };
@@ -289,6 +289,28 @@ export const createCustomer = async (req, res) => {
   res.status(StatusCodes.OK).json({ sales });
 };
 export const updateCustomer = async (req, res) => {
+  const { loyalty } = req.body;
+  const customerId = req.params.id;
+
+  const customerOrders = await Sale.find({ customer: customerId });
+  let allTimeValue = 0;
+  customerOrders.map((purchase) => {
+    allTimeValue += purchase.valueOfOrder;
+  });
+  const customerLoyalty = await CustomerLoyalty.findOne({
+    customer: customerId,
+  }).populate("loyaltyTier");
+  if (customerLoyalty) {
+    const currentLoyaltyTier = customerLoyalty.loyaltyTier;
+    const customerTotalOrderValue = allTimeValue;
+    if (customerTotalOrderValue >= currentLoyaltyTier.minOrderValue) {
+      const nextLoyaltyTier = await LoyaltyTier.findOne({
+        minOrderValue: { $gt: currentLoyaltyTier.minOrderValue },
+      });
+      customerLoyalty.loyaltyTier = nextLoyaltyTier._id;
+      await customerLoyalty.save();
+    }
+  }
   const sales = await Customer.find(/* User*/);
   res.status(StatusCodes.OK).json({ sales });
 };
@@ -297,12 +319,4 @@ export const deleteCustomer = async (req, res) => {
   res.status(StatusCodes.OK).json({ sales });
 };
 
-const updateInventory = (order) => {
-  // Decrease RawIngredients by (prod_ingredient_size_qty - exluded_ingredient_qty)
-  // Decrease RawIngredients by (product_size_qty of package)
-};
-const updateSales = (order) => {
-  //
-};
-
-/********************************* CUSTOMER ORDERS *********************************/
+/********************************* SALES *********************************/

@@ -13,7 +13,7 @@ import mongoose from "mongoose";
 //     },
 //   ],
 
-const TransactionSchema = mongoose.Schema({
+const SaleSchema = mongoose.Schema({
   order: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
   valueOfOrder: Number,
@@ -23,3 +23,6 @@ const TransactionSchema = mongoose.Schema({
   discount: Number,
   createdAt: { type: Date, default: Date.now() },
 });
+
+const Sale = mongoose.model("Sale", SaleSchema);
+export default Sale;

@@ -15,6 +15,7 @@ import clientRoutes from "./routes/client.js";
 import generalRoutes from "./routes/general.js";
 import managementRoutes from "./routes/management.js";
 import salesRoutes from "./routes/sales.js";
+import accountingRoutes from "./routes/accounting.js";
 // MIDDLEWARE
 import { requireAdmin } from "./middleware/authentication.js";
 import { errorHandlerMiddleware } from "./middleware/error-handler.js";
@@ -36,7 +37,7 @@ app.use("/client", clientRoutes);
 app.use("/general", generalRoutes);
 app.use("/management", managementRoutes);
 app.use("/sales", salesRoutes);
-app.get("/general", (req, res) => {});
+app.use("/accounting", accountingRoutes);
 
 app.use(notFound);
 app.use(errorHandlerMiddleware);

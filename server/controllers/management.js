@@ -12,9 +12,11 @@ import {
 import ProductStat from "../models/Products/ProductStat.js";
 import { ProductSize } from "../models/Products/Product.js";
 import Order from "../models/Sales/Order.js";
+import calculateCOGS_FIFO from "../utils/item_cogs.js";
 import PackageOption from "../models/Products/PackageOption.js";
 import { Expense, ExpenseConcept } from "../models/Accounting/Expenses.js";
 import Account from "../models/Accounting/Account.js";
+import Extras from "../models/Products/Extras.js";
 
 /********************************* INVENTORY TYPES *********************************/
 
@@ -28,6 +30,9 @@ export const getAllInventoryTypes = async (req, res) => {
 
 export const createInventoryType = async (req, res) => {
   const { name } = req.body;
+  if (!name) {
+    throw new BadRequestError("Please provide a name");
+  }
   const newInventoryType = await InventoryType.create({ name: name });
   res.status(StatusCodes.OK).json(newInventoryType);
 };
@@ -41,8 +46,10 @@ export const getInventoryType = async (req, res) => {
 };
 
 export const updateInventoryType = async (req, res) => {
+  const { name } = req.body;
   const newInventoryType = await InventoryType.findByIdAndUpdate(
     req.params.id,
+    { name: name },
     { new: true }
   );
   if (!newInventoryType) {
@@ -61,30 +68,63 @@ export const deleteInventoryType = async (req, res) => {
 };
 
 /********************************* INVENTORY ITEMS *********************************/
+
 export const getAllInventoryItems = async (req, res) => {
+  // TODO: build Query for populated type
   const {
     name,
+    nameOptions,
     unitOfMeasurement,
-    projection,
+    unitOfMeasurementOptions,
     numericFilters,
+    projection,
     sort,
-    skip,
     page,
+    offset,
   } = req.query;
-  // TODO: Queryng by type
 
-  // const stringQuery = { name, unitOfMeasurement };
-  // const numQuery = { options: ["thresholdLevel"], numericFilters };
-  // const inventoryQuery = await buildQuery(
-  //   InventoryItem,
-  //   stringQuery,
-  //   numQuery,
-  //   projection,
-  //   sort
-  // );
+  const queryObject = {};
+  const stringParams = [];
+  const numQuery = {};
+  const structureQuery = {};
+  /* Query params */
+  if (name) {
+    stringParams.push({ name, nameOptions });
+  }
+  if (unitOfMeasurement) {
+    stringParams.push({ unitOfMeasurement, unitOfMeasurementOptions });
+  }
+  /* Structure */
+  if (projection) {
+    structureQuery.projection = projection;
+  }
+  if (page && offset) {
+    structureQuery.pagination = { page: page, limit: offset };
+  }
+  if (sort) {
+    structureQuery.sort = sort;
+  }
 
-  const inventoryItems = await InventoryItem.find({});
-  res.status(StatusCodes.OK).json(inventoryItems);
+  /* String and num objects to build query*/
+  if (stringParams.length > 0) {
+    queryObject.stringParams = stringParams;
+  }
+
+  if (numericFilters) {
+    numQuery.numericFilters = numericFilters;
+    numQuery.options = ["currentLevel", "thresholdLevel"];
+  }
+  if (Object.keys(numQuery).length !== 0) {
+    queryObject.numQuery = numQuery;
+  }
+
+  const queryResult = await buildQuery(
+    InventoryItem,
+    queryObject,
+    structureQuery
+  );
+
+  res.status(StatusCodes.OK).json(queryResult);
 };
 
 export const createInventoryItem = async (req, res) => {
@@ -94,29 +134,22 @@ export const createInventoryItem = async (req, res) => {
     throw new BadRequestError("Please provide all of the fields required");
   }
   const createObject = {};
-  if (name) {
-    createObject.name = name;
-  }
-  if (type) {
-    createObject.type = type;
-  }
-  if (unitOfMeasurement) {
-    createObject.unitOfMeasurement = unitOfMeasurement;
-  }
-  if (thresholdLevel) {
-    createObject.thresholdLevel = thresholdLevel;
-  }
+  createObject.name = name;
+  createObject.type = type;
+  createObject.unitOfMeasurement = unitOfMeasurement;
+  createObject.thresholdLevel = thresholdLevel;
+
   const inventoryitem = await InventoryItem.create(createObject);
 
-  res.status(StatusCodes.OK).json(inventoryitem);
+  res.status(StatusCodes.CREATED).json(inventoryitem);
 };
 
 export const getInventoryItem = async (req, res) => {
-  const inventoryItems = InventoryItem.findById(req.params.id).populate("type");
-  if (!inventoryItems) {
+  const inventoryItem = InventoryItem.findById(req.params.id).populate("type");
+  if (!inventoryItem) {
     throw new NotFoundError("Inventory Item not found");
   }
-  res.status(StatusCodes.OK).json({ inventoryItems });
+  res.status(StatusCodes.OK).json(inventoryItem);
 };
 
 export const updateInventoryItem = async (req, res) => {
@@ -153,7 +186,7 @@ export const deleteInventoryItem = async (req, res) => {
   const deletedItem = await InventoryItem.findByIdAndDelete(req.params.id);
   if (!deletedItem) {
     throw new NotFoundError(
-      "The document was not found or could be sucessfuly deleted"
+      "The document was not found or could not be sucessfully deleted"
     );
   }
   res.status(StatusCodes.OK).json(deletedItem);
@@ -197,9 +230,8 @@ export const getAllInventoryHistory = async (req, res) => {
       "beginningInventory",
       "endingInventory",
       "usedUnits",
-      "purchasedUnits",
-      "purchasedCost",
       "wastedUnits",
+      "createdAt",
     ];
   }
   if (Object.keys(numQuery).length !== 0) {
@@ -211,159 +243,336 @@ export const getAllInventoryHistory = async (req, res) => {
     structureQuery
   );
 
-  if (type) {
-    const typeItems = await InventoryItem.find({
-      type: req.params.typeId,
-    }).select("_id");
-    const typeHistory = await InventoryHistory.find({
-      item: { $in: typeItems },
-    });
-  }
+  // if (type) {
+  //   const typeItems = await InventoryItem.find({
+  //     type: req.params.typeId,
+  //   }).select("_id");
+  //   const typeHistory = await InventoryHistory.find({
+  //     item: { $in: typeItems },
+  //   });
+  // }
   res.status(StatusCodes.OK).json(queryProducts);
 };
 
 // Make multiple calls to get data from checkbox
-export const getInventoryHistory = async (req, res) => {
-  const { period } = req.body;
-  // period: return data from period AND calc wheightedAverageCost (from purchases)
-  // Multiply units by WAC to get value
+// TODO: Calc WAC and endInv of lbegInv
+// Set rule: Period (year, month, week, days): take purchases made 1 month prior calculated period to calculate value of ending Inventory
+// 1 month = 4 weeks
+// Example: April's 2nd week's COGS (8-14)
+// April's begInv value = March's endInv value
+// March's endInv value = purchases from March 8th to April 7th calculated with FIFO
+// March's endInv units = 100
+// March Purchases:
+//  1. 50 units @ $3
+//  2. 20 units @ $2
+//  3. 10 units @ $2.50
+//  4. 30 units @ $4
+//  5. 30 units @ $4
+//  6. 30 units @ $5
+//  7. 30 units @ $1
+//  8. 30 units @ $3.50
+//  9. 30 units @ $4
+//  10. 30 units @ $4
+// Only 1 through 4 matter
+// 50 * 3 = $150
+// 20 * 2 = $40
+// 10 * 2.50 = $25
+// 20 * 4 = $80
+// April's beginning Inventory is -> $295 with FIFO
+// If no purchases in previous month, search two months back, and repeato if none found
+// Now calc COGS for April's 2nd week adding up value of (units used + wasted) in that period (Aptril 8th-14th).
+
+export const getInventoryItemHistory = async (req, res) => {
+  const { period, itemId } = req.body;
 
   if (!period || !period.from || !period.to) {
     throw new BadRequestError("Select a start date and an end date");
   }
 
-  /*
-    Add waste and used value
-  */
-  const itemHistory = await InventoryHistory.find({
-    item: req.params.id,
-    createdAt: { $gte: period.from, $lte: period.to },
-  }).populate({ path: "category", select: "name" });
-  let totalCost = 0;
-  let totalUnits = 0;
-  itemHistory.map((registry) => {
-    if (registry.purchasedUnits) {
-      totalCost += registry.purchasedCost;
-      totalUnits += registry.purchasedUnits;
-    }
-  });
-  const weightedAverageCost = totalCost / totalUnits;
-  itemHistory.map((registry) => {
-    registry.usedValue = registry.usedUnits
-      ? weightedAverageCost * registry.usedUnits
-      : null;
-    registry.wastedValue = registry.wastedUnits
-      ? weightedAverageCost * registry.wastedUnits
-      : null;
-  });
+  const { name, itemHistory, COGS } = await calculateCOGS_FIFO(
+    period,
+    req.params.id
+  );
 
-  res
-    .status(StatusCodes.OK)
-    .json({ itemHistory, weightedAverageCost: weightedAverageCost });
+  // function dateIsValid(dateStr) {
+  //   const regex = /^\d{4}-\d{2}-\d{2}$/;
+
+  //   if (dateStr.match(regex) === null) {
+  //     return false;
+  //   }
+
+  //   const date = new Date(dateStr);
+
+  //   const timestamp = date.getTime();
+
+  //   if (typeof timestamp !== "number" || Number.isNaN(timestamp)) {
+  //     return false;
+  //   }
+
+  //   return date.toISOString().startsWith(dateStr);
+  // }
+
+  // if (!dateIsValid(period.from) || !dateIsValid(period.to)) {
+  //   throw new BadRequestError(
+  //     "One or both Dates provided are not in the correct format 'yyyy-mm-dd'"
+  //   );
+  // }
+
+  // /*
+  //   Add waste and used value
+  // */
+
+  // // Find expenses under InventoryItem name for the same period
+  // // Find last months purchases or previous to that one if no purchases found (or purchases are lower than period's begInv)
+  // //
+  // // calc period's begInv with FIFO
+  // // calc period's COGS with begInv and period's usedUnits and wasted with FIFO
+  // // HOW TO CALC UNITS USED AND wasted value for each registry
+  // // 4,
+
+  // // begInv porque pueden pasar meses de no atender el negocio, que el producto se pudra
+  // // Y entonces cuando re-abran y quieran calcular el COGS
+  // // Se debe calcular el COGS con el ebginnin inventory que sería 0.
+  // // No siempre el endInv va a ser begInv.
+  // // Por lo tanto se realizarán compras el mismo día que habran
+
+  // // Que pasa si hace la compra el 09 y la usan/reciben hasta el 20
+  // // Se actualiza el nivel de inventario el 09. Si pasa cualqueir cosa y no se utiliza, se registra como waste
+  // // Da igual si es endInv o begInv, si se pudre todo, del endInv de ayer, se registra como waste del nuevo registro begInv
+  // const dateStart = new Date(period.from);
+  // dateStart.setUTCHours(0, 0, 0, 0);
+  // const dateEnd = new Date(period.from);
+  // dateEnd.setUTCHours(23, 59, 59, 999);
+  // const item = await InventoryHistory.findOne({
+  //   item: req.params.id,
+  //   createdAt: { $gte: dateStart, $lte: dateEnd },
+  // })
+  //   .select("beginningInventory item")
+  //   .populate({ path: "item", select: "name" });
+
+  // if (!item) {
+  //   throw new NotFoundError(
+  //     "No registry found for that item on your start creation date provided"
+  //   );
+  // }
+  // const periodStart = new Date(period.from);
+  // periodStart.setUTCHours(0, 0, 0, 0);
+  // // console.log(
+  // //   "periodStart",
+  // //   new Date(periodStart.setUTCMonth(periodStart.getUTCMonth() - 1))
+  // // );
+  // const periodEnd = new Date(period.to);
+  // periodEnd.setUTCHours(23, 59, 59, 999);
+  // console.log("periodEnd", periodEnd);
+  // const itemHistory = await InventoryHistory.find({
+  //   item: req.params.id,
+  //   createdAt: { $gte: periodStart, $lte: periodEnd },
+  // })
+  //   .select("-item")
+  //   .sort("createdAt");
+
+  // if (itemHistory.length === 0) {
+  //   throw new NotFoundError(
+  //     "No records found with name or time frame provided"
+  //   );
+  // }
+
+  // let periodUnits = 0;
+  // for (const registry of itemHistory) {
+  //   periodUnits += registry.wastedUnits + registry.usedUnits;
+  // }
+
+  // const previousDate = new Date(period.from);
+  // previousDate.setDate(periodStart.getDate() - 1);
+  // //Calc beginningInventory for period to calculate (from $lt -> yesterday)
+  // const beginningInventoryCost = await calculateBeginningInventoryCost_FIFO(
+  //   periodStart,
+  //   item.beginningInventory,
+  //   item.item.name
+  // );
+
+  // const COGS = await calculateCOGS_FIFO(
+  //   beginningInventoryCost,
+  //   item.beginningInventory,
+  //   periodUnits,
+  //   period,
+  //   item.item.name
+  // );
+
+  // async function calculateCOGS_FIFO(
+  //   begInvCost,
+  //   begInvUnits,
+  //   periodUnits,
+  //   period,
+  //   itemName
+  // ) {
+  //   let COGS = 0;
+  //   let remainingUnits = periodUnits + begInvUnits;
+  //   const start = new Date(period.from);
+  //   start.setUTCHours(0, 0, 0, 0);
+  //   const end = new Date(period.to);
+  //   end.setUTCHours(23, 59, 59, 999);
+  //   const periodExpenses = await Expense.find({
+  //     name: itemName,
+  //     createdAt: { $gte: start, $lte: end },
+  //   }).sort("createdAt");
+  //   // Need to push in at beginning
+  //   periodExpenses.unshift({ value: begInvCost, units: begInvUnits });
+
+  //   for (const purchase of periodExpenses) {
+  //     if (remainingUnits > 0) {
+  //       if (purchase.units <= remainingUnits) {
+  //         COGS += purchase.value;
+  //         remainingUnits -= purchase.units;
+  //       } else {
+  //         COGS += remainingUnits * (purchase.value / purchase.units);
+  //         remainingUnits = 0;
+  //       }
+  //     }
+  //   }
+
+  //   return COGS;
+  // }
+
+  // async function calculateBeginningInventoryCost_FIFO(
+  //   calcStart /* COGS period previous date */,
+  //   beginningInventory /* units */,
+  //   itemName
+  // ) {
+  //   let remainingUnits = beginningInventory;
+  //   let totalCost = 0;
+  //   calcStart.setUTCHours(0, 0, 0, 0);
+  //   let periodStart = new Date(calcStart);
+  //   periodStart.setUTCMonth(calcStart.getUTCMonth() - 1);
+  //   // periodStart.setUTCMonth(new Date(periodStart.getUTCMonth() - 1)); // 2023-04-12 -> 2023-03-12
+  //   let periodEnd = new Date();
+
+  //   while (remainingUnits > 0) {
+  //     console.log("remainingUnits", remainingUnits);
+
+  //     periodEnd.setUTCMonth(periodStart.getUTCMonth() + 1);
+
+  //     periodEnd.setUTCHours(23, 59, 59, 999);
+  //     console.log("periodEnd", periodEnd);
+  //     console.log("---------------------------");
+
+  //     // periodEnd.setFullYear(periodStart.getFullYear());
+  //     // periodEnd.setMonth(periodStart.getMonth() + 1);
+  //     // periodEnd.setDate(periodStart.getDate());
+  //     // console.log("periodEnd.getMonth", periodEnd.getUTCMonth());
+  //     // console.log("periodStart.getMonth", periodStart.getUTCMonth());
+  //     const purchases = await Expense.find({
+  //       name: itemName,
+  //       createdAt: {
+  //         $gte: periodStart,
+  //         $lte: periodEnd,
+  //       },
+  //     }).sort({ createdAt: 1 });
+  //     //Such date format necessary because on next loop, we'll take another month back (2023-02-12) and query (2023-02-12 -> 2023-03-12)
+
+  //     for (const purchase of purchases) {
+  //       console.log("purchase", purchase);
+  //       // if pUnits = 100 and rUnits = 300
+  //       if (purchase.units <= remainingUnits) {
+  //         totalCost += purchase.value;
+  //         remainingUnits -= purchase.units;
+  //       } else {
+  //         totalCost += remainingUnits * (purchase.value / purchase.units);
+  //         remainingUnits = 0;
+  //       }
+  //     }
+  //     periodStart.setFullYear(periodStart.getFullYear());
+  //     periodStart.setMonth(periodStart.getMonth() - 1);
+  //     periodStart.setDate(periodStart.getDate());
+  //     periodStart.setUTCHours(0, 0, 0, 0);
+  //   }
+  //   console.log("totalCost", totalCost);
+  //   return totalCost;
+  // }
+
+  /*
+  CALC PERIOD's UNITS USED AND LOOK BACK ON PURCHASE UTIL SUM IS GREATER TAHN OR EQUAL TO TH PERIOD AND CALC UNITARY 
+  WAIT, WHAT about the beginning inventory. Should 
+  Maybe go back until the sum is >= than units used - begInv
+  HOW TO CALCULATE BEGINNING INVENTROY COST
+  I am confused 
+  TRACK FIFO of month if calculating COGS for 1 month, FIFO of year if calc 1 year COGS.
+  */
+
+  // const periodExpenses = Expense.findOne({name: })
+  // wheightedAverageCost (COGS) is always calculated for the period. Never stored.
+  // To calculate value of units used and wasted in inventory history
+  // You could store 2 bundles of an item purchased twice (1 per purchase).
+  // If you sell 1 bundle, wheightedAverageCost is calculated to calc COGS, not expenses
+  // const weightedAverageCost = totalCost / totalUnits;
+  // itemHistory.map((registry) => {
+  //   registry.usedValue = registry.usedUnits
+  //     ? weightedAverageCost * registry.usedUnits
+  //     : null;
+  //   registry.wastedValue = registry.wastedUnits
+  //     ? weightedAverageCost * registry.wastedUnits
+  //     : null;
+  // });
+
+  res.status(StatusCodes.OK).json({
+    item: name,
+    itemHistory,
+    COGS /*, weightedAverageCost: weightedAverageCost */,
+  });
 };
+
+export const getInventoryHistory = async (req, res) => {};
 
 export const createInventoryHistory = async (req, res) => {
   // Create at start of day
-  const { beginningInventory } = req.body;
+  const { beginningInventory, itemId } = req.body;
   if (!beginningInventory) {
     new BadRequestError(
-      "To write today's inventory please provide your starting inventory"
+      "To write today's inventory please provide your beginning inventory"
     );
   }
-  const latestRegistry = await InventoryHistory.findOne()
-    .sort("-createdAd")
+  const latestRegistry = await InventoryHistory.findOne({ item: itemId })
+    .sort("-createdAt")
     .select("createdAt");
 
-  console.log("Date.now().getDate()", Date.now().getDate());
-  if (
-    latestRegistry.createdAt.getDate() === Date.now().getDate() &&
-    latestRegistry.createdAt.getMonth() === Date.now().getMonth()
-  ) {
-    throw new CustomAPIError(
-      "Current date's registry has already been created"
-    );
+  const today = new Date(Date.now());
+  if (latestRegistry) {
+    if (
+      latestRegistry.createdAt.getDate() === today.getDate() &&
+      latestRegistry.createdAt.getMonth() === today.getMonth()
+    ) {
+      throw new BadRequestError(
+        "Duplication err: Current date's registry has already been created for that item"
+      );
+    }
   }
-  const newRegistry = await InventoryHistory.create(beginningInventory);
+  const newRegistry = await InventoryHistory.create({
+    beginningInventory: beginningInventory,
+    item: itemId,
+  });
   res.status(StatusCodes.CREATED).json(newRegistry);
 };
 
 export const updateInventoryHistory = async (req, res) => {
   // At end of each day
-  const { endingInventory, unitsUsed, purchase, wasteUnits } = req.body;
+  const { endingInventory, usedUnits, wastedUnits } = req.body;
 
   // Write expense
   // Update account
-  // wheightedAverageCost (COGS) is always calculated for the period. Never stored. To calculate value of units used and wasted in inventory history
-  // You could store 2 loads of an item purchased twice. If you sell 1 load, wheightedAverageCost is calculated to calc COGS
   // Get each item's purchases by time period
   // calc wheightedAverageCost
   // multiply by units used and wasted
-  if (
-    (purchase.units && !purchase.cost) ||
-    (!purchase.units && purchase.cost)
-  ) {
-    throw new BadRequestError(
-      "If you made a purchase, you need to provide units and cost"
-    );
-  }
-  if (!endingInventory || !unitsUsed || !wasteUnits) {
-    throw new BadRequestError(
-      "Please provide all of the fields to successfully conclude today's inventory registry"
-    );
-  }
 
   const updateObject = {};
 
-  if (purchase) {
-    /*
-      Validate if registry has purchase fields
-      Update if true, create if false
-    */
-    // Save purchases in Expenses instead of in the InventoryHistory and
-    // store the created Expense document's _id in the registry of the most recent InventoryHistory document
-    // Maybe look up table of Expenses and source
-    // How do I store source _id with different refs. To be able to properly populate or aggregate
-    // Option: make an intermediary table (Change current Transaction.js to Sale.js)
-    // Build Transaction.js that stores type, value/amount. Depending on 'type', increase or decrease account_balance
-    const currentRegistry = await InventoryHistory.findOne({
-      _id: req.params.id,
-    });
-    if (
-      currentRegistry.purchasedUnits ||
-      currentRegistry.purchasedUnits !== 0
-    ) {
-      await Expense.updateOne(
-        { createdAt: currentRegistry.createdAt },
-        { value: purchase.cost }
-      );
-    } else {
-    }
-    const concept = await ExpenseConcept.findOne({ concept: "inventories" });
-    if (!concept) {
-      throw new NotFoundError(
-        "Please create a concept with the name 'inventories' before registering a purchase"
-      );
-    }
-    const expenseRegistered = await Expense.create({
-      concept: concept.concept,
-      value: purchase.cost,
-    });
+  // Save purchases in Expenses instead of in the InventoryHistory
 
-    if (!expenseRegistered) {
-      throw new CustomAPIError("The expense could not be registered");
-    }
-
-    updateObject.purchasedUnits = purchase.units;
-    updateObject.purchasedCost = purchase.cost;
-
-    const latestAccount = await Account.findOne().sort("-createdAt");
-    const cash = latestAccount.cash - purchase.cost;
-    await Account.create(cash);
-  }
+  // Just store the name of the source of the expense.
+  // You dont need to have a connection with every schema an expense comes from
 
   updateObject.endingInventory = endingInventory;
-  updateObject.unitsUsed = unitsUsed;
-  updateObject.wasteUnits = wasteUnits;
+  updateObject.usedUnits = usedUnits;
+  updateObject.wastedUnits = wastedUnits;
 
   const updatedRegistry = await InventoryHistory.updateOne(
     { _id: req.params.id },
@@ -374,16 +583,14 @@ export const updateInventoryHistory = async (req, res) => {
   res.status(StatusCodes.OK).json(updatedRegistry);
 };
 
-/********************************* ACCOUTING *********************************/
-
-export const getSales = (req, res) => {};
-export const createExpense = async (req, res) => {
-  const { value } = req.body;
-  if (value) {
-    throw new BadRequestError(
-      "If you want to update this expense record, you need to update the corresponding item purchase record"
-    );
+export const deleteInventoryHistory = async (req, res) => {
+  const deletedRegistry = await InventoryHistory.findByIdAndDelete(
+    req.params.id
+  );
+  if (!deletedRegistry) {
+    throw new NotFoundError("Registry does not exist");
   }
+  res.status(StatusCodes.OK).json({ msg: "Registry was deleted" });
 };
 
 /********************************* PRODUCT STATS *********************************/
@@ -414,7 +621,7 @@ export const updateProductStats = (req, res) => {
   //   },
   // ]);
 
-  // Get date of lastupdate
+  // Get date of lastupdate from any item
   const lastUpdate = ProductStat.findOne({})
     .select("updatedAt")
     .sort("-updatedAt");
@@ -425,7 +632,7 @@ export const updateProductStats = (req, res) => {
       $match: {
         createdAt: {
           $gte: new Date(lastUpdate),
-          $lt: new Date.now(),
+          $lte: new Date.now(),
         },
       },
     },
@@ -438,7 +645,7 @@ export const updateProductStats = (req, res) => {
   ]);
 
   // Process each product, package and extra in each Order
-  orders.map((dailyOrders) => {
+  /*  orders.map((dailyOrders) => {
     // Get values and generate/add each stat
     let productValue;
     dailyOrders.forEach((order) => {
@@ -455,15 +662,16 @@ export const updateProductStats = (req, res) => {
         });
         productValue += packageOpt.price * orderItem.quantity;
       });
-      order.extras.map((product) => {
-        const product = ProductSize.findOne({
-          product: order.product,
+      order.extras.map((extra) => {
+        const product = Extras.findOne({
+          item: order.product,
           size: order.size,
         });
         productValue += product.price;
       });
     });
   });
-
+*/
   const stats = ProductStat.insertMany();
+  res.status(StatusCodes.OK).json(orders);
 };

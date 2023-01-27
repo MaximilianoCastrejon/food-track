@@ -4,15 +4,15 @@ import InventoryHistory from "./InventoryHistory.js";
 
 // Display as columns. Y axis = units, X axis = all
 const InventoryItemSchema = mongoose.Schema({
-  name: String,
+  name: { type: String, unique: true, require: true },
   type: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "InventoryType",
     required: true,
   },
-  unitOfMeasurement: String,
-  currentLevel: Number,
-  thresholdLevel: Number,
+  unitOfMeasurement: { type: String, require: true },
+  currentLevel: { type: Number, require: true },
+  thresholdLevel: { type: Number, require: true },
 });
 
 InventoryItemSchema.pre("remove", function (next) {

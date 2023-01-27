@@ -4,36 +4,36 @@ import mongoose from "mongoose";
 // Concepts: Inventory Expenses
 
 const ExpenseConceptSchema = new mongoose.Schema({
-  _id: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-  },
   concept: {
+    // Machinery, inventories, equipment
     type: String,
     required: true,
   },
-  // any other relevant fields
 });
 
-const ExpenseSchema = new mongoose.Schema(
-  {
-    value: {
-      type: Number,
-      required: true,
-    },
-    concept: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Source",
-      required: true,
-    },
-    sourceType: {
-      type: String,
-      required: true,
-    },
-    // any other relevant fields
+const ExpenseSchema = new mongoose.Schema({
+  value: {
+    type: Number,
+    required: true,
   },
-  { timestamps: true }
-);
+  units: {
+    type: Number,
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  concept: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "ExpenseConcept",
+    required: true,
+  },
+  createdAt: { type: Date, default: Date.now() },
+  updatedAt: { type: Date, default: Date.now() },
+
+  // any other relevant fields
+});
 
 const ExpenseConcept = mongoose.model("ExpenseConcept", ExpenseConceptSchema);
 const Expense = mongoose.model("Expense", ExpenseSchema);

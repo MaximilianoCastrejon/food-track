@@ -13,11 +13,19 @@ router
   .patch(managementController.updateInventoryItem)
   .delete(managementController.deleteInventoryItem);
 
+// I dont need to access or query all registries at once
+router
+  .route("/inventory/items/history/:id")
+  .get(managementController.getInventoryItemHistory);
 router
   .route("/inventory/history")
   .get(managementController.getAllInventoryHistory)
-  .post();
-router.route("/inventory/:id/history").get().post();
+  .post(managementController.createInventoryHistory);
+router
+  .route("/inventory/history/:id")
+  .get(managementController.getInventoryHistory)
+  .patch(managementController.updateInventoryHistory)
+  .delete(managementController.deleteInventoryHistory);
 
 router
   .route("/inventory/types")

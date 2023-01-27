@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const AccountSchema = mongoose.Schema({
-  cash: Number,
+  balance: Number,
   createdAt: { type: Date, default: Date.now() },
 });
 

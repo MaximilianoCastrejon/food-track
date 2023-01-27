@@ -7,6 +7,7 @@ export const buildQuery = async (
   if (stringParams) {
     stringParams.forEach((obj) => {
       Object.entries(obj).forEach(([key, value]) => {
+        console.log("[key, value]", [key, value]);
         const match = key.match(/(.*)Options/);
         if (match) {
           const field = match[1];
