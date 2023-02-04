@@ -1,8 +1,9 @@
 import mongoose from "mongoose";
-import { ProductIngredient } from "../Products/Product.js";
+import { Recipie } from "../Products/Product.js";
 import InventoryHistory from "./InventoryHistory.js";
 
 // Display as columns. Y axis = units, X axis = all
+// Update current level when new InventoryHistory is created
 const InventoryItemSchema = mongoose.Schema({
   name: { type: String, unique: true, require: true },
   type: {
@@ -16,7 +17,7 @@ const InventoryItemSchema = mongoose.Schema({
 });
 
 InventoryItemSchema.pre("remove", function (next) {
-  ProductIngredient.deleteMany({ ingredient: this._id });
+  Recipie.deleteMany({ ingredient: this._id });
   InventoryHistory.deleteMany({ item: this._id }, next);
 });
 

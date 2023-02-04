@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { NotFoundError } from "../../errors/not-found.js";
 import InventoryItem from "../Inventories/InventoryItem.js";
 import InventoryType from "../Inventories/InventoryType.js";
 
@@ -16,32 +17,31 @@ const ProductSchema = new mongoose.Schema(
         },
       },
     },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
     description: {
       type: String,
       required: true,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
   },
-  { strictPopulate: false }
+  { timestamps: true }
 );
 
 // product + size -> PK
 // Product price calculations
-const ProductSizeSchema = new mongoose.Schema({
+const ProductPriceSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
-    unique: true,
   },
   size: {
     type: String,
     enum: ["small", "medium", "large", "fixed"],
     required: true,
-    unique: true,
   },
   price: {
     type: Number,
@@ -49,65 +49,40 @@ const ProductSizeSchema = new mongoose.Schema({
   },
 });
 
-// Statistical analysis
-// Registration of products from category
-const ProductCategorySchema = new mongoose.Schema({
-  product: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Product",
-    required: true,
-  },
-  category: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Category",
-    required: true,
-  },
-});
-
 // Inventory updating
-const ProductIngredientSchema = new mongoose.Schema({
+const RecipieSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
     unique: true,
-    sparse: true,
   },
   ingredient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "InventoryItem",
     required: true,
     unique: true,
-    sparse: true,
     validate: {
       validator: async function (id) {
-        const item = await InventoryItem.findById(id);
+        const item = await InventoryItem.findById(id).populate("type");
         if (!item) {
-          return false;
+          throw new NotFoundError("Item does not exist in inventory");
         }
-        const type = await InventoryType.findById(item.type);
-        if (!type) {
-          return false;
-        }
-        return type.name === "ingredient";
+        return item.type.name === "ingredient";
       },
       message:
         "The item is not of type 'ingredient'. Please create at least one in the 'inventory' section unser 'management'",
     },
   },
-  quantity: {
-    small: {
-      type: Number,
-    },
-    medium: {
-      type: Number,
-    },
-    large: {
-      type: Number,
-    },
-    fixed: {
-      type: Number,
-    },
+  size: {
+    type: String,
+    enum: ["small", "medium", "large", "fixed"],
+    unique: true,
+    required: true,
+  },
+  units: {
+    type: Number,
+    required: true,
   },
 });
 
@@ -184,19 +159,11 @@ const ProductIngredientSchema = new mongoose.Schema({
 // });
 
 ProductSchema.pre("remove", async function () {
-  await ProductSize.deleteMany({ product: this._id });
-  await ProductCategory.findOneAndDelete({ product: this._id });
-  await ProductIngredient.deleteMany({ product: this._id });
+  await ProductPrice.deleteMany({ product: this._id });
+  await Recipie.deleteMany({ product: this._id });
 });
 
 const Product = mongoose.model("Product", ProductSchema);
-const ProductSize = mongoose.model("ProductSize", ProductSizeSchema);
-const ProductCategory = mongoose.model(
-  "ProductCategory",
-  ProductCategorySchema
-);
-const ProductIngredient = mongoose.model(
-  "ProductIngredient",
-  ProductIngredientSchema
-);
-export { Product, ProductSize, ProductCategory, ProductIngredient };
+const ProductPrice = mongoose.model("ProductPrice", ProductPriceSchema);
+const Recipie = mongoose.model("Recipie", RecipieSchema);
+export { Product, ProductPrice, Recipie };

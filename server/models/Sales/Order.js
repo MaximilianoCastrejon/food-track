@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import InventoryItem from "../Inventories/InventoryItem.js";
 import Extras from "../Products/Extras.js";
-import { Product, ProductIngredient } from "../Products/Product.js";
+import { Product, Recipie } from "../Products/Product.js";
 
 // TODO: add packages
 const OrderSchema = new mongoose.Schema(
@@ -15,6 +15,11 @@ const OrderSchema = new mongoose.Schema(
             return !this.packages || this.packages.length === 0;
           },
         },
+        size: {
+          type: String,
+          enum: ["small", "medium", "large", "fixed"],
+          required: true,
+        },
         quantity: {
           type: Number,
           default: 0,
@@ -22,25 +27,7 @@ const OrderSchema = new mongoose.Schema(
         },
         excludedIngredients: {
           type: [mongoose.Schema.Types.ObjectId],
-          ref: "InventoryItem",
-          validate: {
-            validator: async function (id) {
-              // Check that the name field of each excluded ingredient is equal to "ingredient"
-              const excludedIngredients = await InventoryItem.find({
-                _id: { $in: id },
-                name: "ingredient",
-              });
-              return excludedIngredients.length === id.length;
-            },
-            message:
-              "One or more of the excluded ingredients does not have a name equal to 'ingredient'",
-          },
-        },
-
-        size: {
-          type: String,
-          enum: ["small", "medium", "large", "fixed"],
-          required: true,
+          ref: "Recipie",
         },
       },
     ],
@@ -62,6 +49,11 @@ const OrderSchema = new mongoose.Schema(
                   ref: "Product",
                   required: true,
                 },
+                size: {
+                  type: String,
+                  enum: ["small", "medium", "large", "fixed"],
+                  required: true,
+                },
                 quantity: {
                   type: Number,
                   default: 0,
@@ -69,25 +61,7 @@ const OrderSchema = new mongoose.Schema(
                 },
                 excludedIngredients: {
                   type: [mongoose.Schema.Types.ObjectId],
-                  ref: "InventoryItem",
-                  validate: {
-                    validator: async function (value) {
-                      // Check that the name field of each excluded ingredient is equal to "ingredient"
-                      const excludedIngredients = await InventoryItem.find({
-                        _id: { $in: value },
-                        name: "ingredient",
-                      });
-                      return excludedIngredients.length === value.length;
-                    },
-                    message:
-                      "One or more of the excluded ingredients does not have a name equal to 'ingredient'",
-                  },
-                },
-
-                size: {
-                  type: String,
-                  enum: ["small", "medium", "large", "fixed"],
-                  required: true,
+                  ref: "Recipie",
                 },
               },
             ],
@@ -131,6 +105,8 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+export const ExcludedIngredientsSchema = mongoose;
+
 // OrderSchema.pre("save", async function (next) {
 //   // Get the product associated with this order
 //   const product = await Product.findById(this.product);
@@ -154,17 +130,17 @@ const OrderSchema = new mongoose.Schema(
 //   try {
 //     // Decrement the inventory levels of each ingredient in each product in the order by the quantity of the order
 //     for (const product of this.products) {
-//       // Find the ProductIngredient document for the current product in the order
-//       const dbProductIngredient = await ProductIngredient.findOne({
+//       // Find the Recipie document for the current product in the order
+//       const dbRecipie = await Recipie.findOne({
 //         product: product.product,
 //       });
-//       if (!dbProductIngredient) continue;
-//       console.log("dbProductIngredient", dbProductIngredient);
+//       if (!dbRecipie) continue;
+//       console.log("dbRecipie", dbRecipie);
 //       // Decrement the inventory levels of the ingredient in the product by the quantity of the product in the order
-//       // await RawIngredient.findByIdAndUpdate(dbProductIngredient.ingredient, {
+//       // await RawIngredient.findByIdAndUpdate(dbRecipie.ingredient, {
 //       //   $inc: {
 //       //     // TODO: Decide on the ingredient quantities structure. Default to small or check in product category if hasSisez to use "fixed"
-//       //     quantity: -dbProductIngredient.quantity.small * product.quantity,
+//       //     quantity: -dbRecipie.quantity.small * product.quantity,
 //       //   },
 //       // });
 //     }
@@ -176,15 +152,15 @@ const OrderSchema = new mongoose.Schema(
 
 //       console.log("extraDoc", extraDoc);
 //       if (extraDoc.productId) {
-//         // Find the ProductIngredient document for the extra
-//         const dbProductIngredient = await ProductIngredient.findOne({
+//         // Find the Recipie document for the extra
+//         const dbRecipie = await Recipie.findOne({
 //           product: extraDoc.productId,
 //         });
 
 //         // Decrement the inventory levels of the ingredient in the product by the quantity of the extra multiplied by the small value in the product ingredient
-//         // await RawIngredient.findByIdAndUpdate(dbProductIngredient.ingredient, {
+//         // await RawIngredient.findByIdAndUpdate(dbRecipie.ingredient, {
 //         //   $inc: {
-//         //     quantity: -dbProductIngredient.quantity.small * extraDoc.quantity,
+//         //     quantity: -dbRecipie.quantity.small * extraDoc.quantity,
 //         //   },
 //         // });
 //       } else if (extraDoc.ingredientId) {
@@ -272,7 +248,7 @@ const addExcludedIngredientsBackToInventory = async (order) => {
     // if (!excludedIngredients || excludedIngredients.length === 0) continue;
 
     // Find the product document for the current product in the order
-    // const ingredient_qty_list = await ProductIngredient.find({
+    // const ingredient_qty_list = await Recipie.find({
     //   product: orderItem.product,
     // }).select(`ingredient quantity.${orderItem.size}`);
     // // TODO: Handle error if product wasn't found

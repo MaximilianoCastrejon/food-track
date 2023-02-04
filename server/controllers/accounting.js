@@ -4,9 +4,10 @@ import { BadRequestError } from "../errors/bad-request.js";
 import { NotFoundError } from "../errors/not-found.js";
 import mongoose from "mongoose";
 import Account from "../models/Accounting/Account.js";
-import { Shareholder } from "../models/Accounting/Equity.js";
+import { EquityPayout, Shareholder } from "../models/Accounting/Equity.js";
 import { Expense, ExpenseConcept } from "../models/Accounting/Expenses.js";
 import { CustomAPIError } from "../errors/custom-api.js";
+import calculateCOGS_FIFO from "../utils/item_cogs.js";
 
 /********************************* BALANCE *********************************/
 
@@ -44,6 +45,10 @@ export const getAllBalances = (req, res) => {
 
   const queryResult = buildQuery(Account, queryObject, structureQuery);
 
+  if (!queryResult) {
+    throw new NotFoundError("No documents found");
+  }
+
   res.status(StatusCodes.OK).json(queryResult);
 };
 
@@ -74,13 +79,18 @@ export const createExpenseConcept = async (req, res) => {
 /********************************* EXPENSES *********************************/
 
 export const getAllExpenses = (req, res) => {
-  const { numericFilters, projection, sort, page, offset } = req.query;
+  const { concept, numericFilters, projection, sort, page, offset, populate } =
+    req.query;
 
   const queryObject = {};
   const stringParams = [];
   const numQuery = {};
+  const idFields = [];
   const structureQuery = {};
   /* Query params */
+  if (concept) {
+    idFields.push({ id: concept, fieldName: "concept" });
+  }
   /* Structure */
   if (projection) {
     structureQuery.projection = projection;
@@ -90,6 +100,9 @@ export const getAllExpenses = (req, res) => {
   }
   if (sort) {
     structureQuery.sort = sort;
+  }
+  if (populate) {
+    structureQuery.populate = populate;
   }
 
   /* String and num objects to build query*/
@@ -107,11 +120,15 @@ export const getAllExpenses = (req, res) => {
 
   const queryResult = buildQuery(Account, queryObject, structureQuery);
 
+  if (!queryResult) {
+    throw new NotFoundError("No documents found");
+  }
+
   res.status(StatusCodes.OK).json(queryResult);
 };
 
 export const createExpense = async (req, res) => {
-  const { value, units, name, concept, createdAt, updatedAt } = req.body;
+  const { value, units, name, concept, createdAt } = req.body;
   if (!value || !units || !name || !concept) {
     throw new BadRequestError(
       "Please provide all of the fields required for this operation"
@@ -122,8 +139,87 @@ export const createExpense = async (req, res) => {
   createObject.units = units;
   createObject.name = name;
   createObject.concept = concept;
+  if (createdAt) {
+    createObject.createdAt = createdAt;
+  }
+
   const newExpense = await Expense.create(createObject);
+  if (!newExpense) {
+    throw new CustomAPIError(
+      "New expense registry was not successfully created"
+    );
+  }
+  // Create an account document
   res.status(StatusCodes.CREATED).json(newExpense);
+};
+
+export const updateExpense = async (req, res) => {
+  const { value, units, name, concept, createdAt } = req.body;
+
+  const updateExpense = {};
+
+  if (value) {
+    updateExpense.value = value;
+  }
+  if (units) {
+    updateExpense.units = units;
+  }
+  if (name) {
+    updateExpense.name = name;
+  }
+  if (concept) {
+    updateExpense.concept = concept;
+  }
+  if (createdAt) {
+    updateExpense.createdAt = createdAt;
+  }
+  const updateAccount = {};
+  updateExpense.updatedAt = new Date(Date.now());
+
+  const update = await Expense.findByIdAndUpdate(req.params.id, updateExpense);
+  if (!update) {
+    throw new NotFoundError("That registry could not be found");
+  }
+  if (value) {
+    let valueDiff = update.value - value;
+    updateAccount.updatedAt = new Date(Date.now());
+    updateAccount.balance = { $inc: -valueDiff };
+    // Because its and historical record, all subsequent registries should be updated
+    await Account.updateMany(
+      { createdAt: { $gt: update.createdAt } },
+      updateAccount
+    );
+    await Account.updateOne({ createdAt: update.createdAt }, updateAccount);
+  }
+
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: "Expense registry and account records updated" });
+};
+
+export const deleteExpense = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const deleted = Expense.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      throw new NotFoundError(
+        "That expense registry could not be found in the database"
+      );
+    }
+    await Account.updateMany(
+      { createdAt: { $gte: deleted.createdAt } },
+      { balance: { $inc: deleted.value }, updatedAt: new Date(Date.now()) }
+    );
+    session.commitTransaction();
+  } catch (error) {
+    session.abortTransaction();
+  } finally {
+    session.endSession();
+  }
+  res.status(StatusCodes.OK).json({
+    mmsg: "All account documents were successfully updated and that expense was deleted",
+  });
 };
 
 /********************************* SHAREHOLDERS *********************************/
@@ -183,9 +279,30 @@ export const getAllEquity = (req, res) => {
     queryObject.numQuery = numQuery;
   }
 
-  const queryResult = buildQuery(Account, queryObject, structureQuery);
+  const queryResult = buildQuery(EquityPayout, queryObject, structureQuery);
+
+  if (!queryResult) {
+    throw new NotFoundError("No documents found");
+  }
 
   res.status(StatusCodes.OK).json(queryResult);
 };
 
 /********************************* INCOME *********************************/
+
+/********************************* COGS *********************************/
+
+export const generateCOGSReport = async (req, res) => {
+  const { itemId, period } = req.body;
+  if (!period || !period.from || !period.to) {
+    throw new BadRequestError("Select a start date and an end date");
+  }
+  if (!itemId) {
+    throw new BadRequestError(
+      "Provide an Id of the item to calculate its COGS"
+    );
+  }
+  const { name, itemHistory, COGS } = await calculateCOGS_FIFO(period, itemId);
+
+  res.status(StatusCodes.OK).json(name, COGS, itemHistory);
+};

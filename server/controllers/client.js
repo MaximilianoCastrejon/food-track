@@ -1,9 +1,4 @@
-import {
-  Product,
-  ProductCategory,
-  ProductSize,
-  ProductIngredient,
-} from "../models/Products/Product.js";
+import { Product, ProductPrice, Recipie } from "../models/Products/Product.js";
 import ProductStat from "../models/Products/ProductStat.js";
 import Category from "../models/Products/Category.js";
 import { buildQuery } from "../utils/buildQuery.js";
@@ -24,30 +19,159 @@ export const getProducts = async (req, res) => {
     nameOptions,
     description,
     descriptionOptions,
+    category,
+    categoryOptions,
     numericFilters,
     projection,
     sort,
-    // category,
-    // categoryOptions,
-    // ingredient,
-    // ingredientOptions,
-    // ingredientNumFields,
-    // size,
-    // sizeNumFields,
     page,
     offset,
   } = req.query;
 
   const queryObject = {};
-  const stringParams = [];
   const numQuery = {};
   const structureQuery = {};
   /* Query params */
+
+  const stringParams = [];
+  const fields = [
+    { name: "name", value: name, options: nameOptions },
+    { name: "description", value: description, options: descriptionOptions },
+    { name: "category", value: category, options: categoryOptions },
+  ];
+
+  for (const field of fields) {
+    if (field.value) {
+      stringParams.push({
+        [field.name]: field.value,
+        [`${field.name}Options`]: field.options,
+      });
+    }
+  }
+
+  /* Structure */
+  if (projection) {
+    structureQuery.projection = projection;
+  }
+  if (page && offset) {
+    structureQuery.pagination = { page: page, limit: offset };
+  }
+  if (sort) {
+    structureQuery.sort = sort;
+  }
+
+  /* String and num objects to build query*/
+
+  if (stringParams.length > 0) {
+    queryObject.stringParams = stringParams;
+  }
+
+  if (numericFilters) {
+    numQuery.numericFilters = numericFilters;
+    numQuery.options = [];
+  }
+  if (Object.keys(numQuery).length !== 0) {
+    queryObject.numQuery = numQuery;
+  }
+  const queryProducts = await buildQuery(Product, queryObject, structureQuery);
+
+  if (!queryProducts) {
+    throw new NotFoundError("No documents found");
+  }
+
+  // const totalDocuments = await Product.countDocuments();
+  // const totalPages = Math.ceil(totalDocuments / pagination.limit);
+
+  res.status(StatusCodes.OK).json({
+    queryProducts,
+  });
+};
+
+export const getProductById = async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  const ingredients = await Recipie.find({
+    product: req.params.id,
+  })
+    .select("-product")
+    .populate("ingredient");
+  const prices = await ProductPrice.find({ product: req.params.id }).select(
+    "-product"
+  );
+
+  res.status(StatusCodes.OK).send({ product, category, ingredients, prices });
+};
+
+export const createProduct = async (req, res) => {
+  const { name, description, categoryId } = req.body;
+  const transaction = req.transaction;
+  const result = {};
+  // "category" should be and ID from the rendered form
+  // Ingredients should be a list
+  if (!name || !description || !categoryId) {
+    throw new BadRequestError(
+      "Plase provide all of the necessary fiels to create your product"
+    );
+  }
+  const createProd = {
+    name: name,
+    description: description,
+    category: categoryId,
+  };
+  result.product = await Product.create(createProd, { session });
+  transaction.commitTransaction();
+  res.status(StatusCodes.CREATED).json(result);
+};
+
+export const deleteProduct = async (req, res) => {
+  const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+  if (!deletedProduct) {
+    throw new NotFoundError("Product was not found in the database");
+  }
+  res.status(StatusCodes.OK).send(deletedProduct);
+};
+
+export const updateProduct = async (req, res) => {
+  const { name, description, category } = req.body;
+
+  const updateProd = {};
+  const messages = {};
   if (name) {
-    stringParams.push({ name, nameOptions });
+    updateProd.name = name;
   }
   if (description) {
-    stringParams.push({ description, descriptionOptions });
+    updateProd.description = description;
+  }
+  if (category) {
+    updateProd.category = category;
+  }
+
+  const result = await Product.findByIdAndUpdate(req.params.id, updateProd, {
+    new: true,
+  });
+  if (!result.product) {
+    throw new NotFoundError("No product was found with that ID");
+  }
+
+  res.status(StatusCodes.OK).send(result);
+};
+
+/********************************* PRODUCT PRICES *********************************/
+
+export const getPrices = async (req, res) => {
+  const { size, numericFilters } = req.body;
+  const product = req.params.id;
+
+  const queryObject = {};
+  const stringParams = [];
+  const idFields = [];
+  const numQuery = {};
+  const structureQuery = {};
+  /* Query params */
+  if (product) {
+    idFields.push({ id: product, fieldName: "product" });
+  }
+  if (size) {
+    stringParams.push({ size, sizeOptions });
   }
   /* Structure */
   if (projection) {
@@ -68,374 +192,149 @@ export const getProducts = async (req, res) => {
 
   if (numericFilters) {
     numQuery.numericFilters = numericFilters;
-    numQuery.options = [""];
+    numQuery.options = ["price"];
   }
   if (Object.keys(numQuery).length !== 0) {
     queryObject.numQuery = numQuery;
   }
-  const queryProducts = await buildQuery(Product, queryObject, structureQuery);
-
-  const productsData = await Promise.all(
-    queryProducts.map(async (product) => {
-      const category = await ProductCategory.findOne({
-        product: product._id,
-      })
-        .select("-product")
-        .populate("category");
-      const ingredients = await ProductIngredient.find({
-        product: product._id,
-      })
-        .select("-product")
-        .populate("ingredient");
-      const prices = await ProductSize.find({ product: product._id }).select(
-        "-product"
-      );
-
-      return {
-        product,
-        category,
-        ingredients,
-        prices,
-      };
-    })
+  const queryProducts = await buildQuery(
+    ProductPrice,
+    queryObject,
+    structureQuery
   );
 
-  // const totalDocuments = await Product.countDocuments();
-  // const totalPages = Math.ceil(totalDocuments / pagination.limit);
+  if (!queryProducts) {
+    throw new NotFoundError("No documents found");
+  }
+};
 
-  res.status(StatusCodes.OK).json({
-    productsData,
-    // products,
-    // productsData,
-    // totalDocuments,
+export const createPrices = async (req, res) => {
+  const { size, price } = req.body;
+  const product = req.params.id;
+  const transaction = req.transaction;
+  // "prices":[
+  //   {"size": "small", "price": 200},
+  //   {"size": "medium", "price": 250},
+  //   {"size": "large", "price": 300},
+  // ]
+  if (!size || !price) {
+    throw new BadRequestError(
+      "Please provide both the size and price for the presentations of this product"
+    );
+  }
+  const createProdSize = {
+    product: product,
+    size: size,
+    price: price,
+  };
+  const result = await ProductPrice.create(createProdSize, {
+    transaction,
   });
-};
 
-export const getProductById = async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  const category = await ProductCategory.find({
-    product: req.params.id,
-  })
-    .select("-product")
-    .populate("category");
-  const ingredients = await ProductIngredient.find({
-    product: req.params.id,
-  })
-    .select("-product")
-    .populate("ingredient");
-  const prices = await ProductSize.find({ product: req.params.id }).select(
-    "-product"
+  transaction.commitTransaction();
+  res.status(StatusCodes.CREATED).json(result);
+};
+export const deletePrices = async (req, res) => {};
+export const updatePrices = async (req, res) => {};
+
+/********************************* PRODUCT RECIPIE *********************************/
+export const getAllRecipies = async (req, res) => {
+  const { ingredient, size, numericFilters } = req.body;
+  const product = req.params.id;
+
+  const queryObject = {};
+  const stringParams = [];
+  const idFields = [];
+  const numQuery = {};
+  const structureQuery = {};
+  /* Query params */
+  if (product) {
+    idFields.push({ id: product, fieldName: "product" });
+  }
+  if (ingredient) {
+    idFields.push({ id: ingredient, fieldName: "ingredient" });
+  }
+  if (size) {
+    stringParams.push({ size, sizeOptions });
+  }
+  /* Structure */
+  if (projection) {
+    structureQuery.projection = projection;
+  }
+  if (page && offset) {
+    structureQuery.pagination = { page: page, limit: offset };
+  }
+  if (sort) {
+    structureQuery.sort = sort;
+  }
+
+  /* String and num objects to build query*/
+
+  if (stringParams.length > 0) {
+    queryObject.stringParams = stringParams;
+  }
+
+  if (numericFilters) {
+    numQuery.numericFilters = numericFilters;
+    numQuery.options = ["units"];
+  }
+  if (Object.keys(numQuery).length !== 0) {
+    queryObject.numQuery = numQuery;
+  }
+  const queryProducts = await buildQuery(
+    ProductPrice,
+    queryObject,
+    structureQuery
   );
 
-  res.status(StatusCodes.OK).send({ product, category, ingredients, prices });
+  if (!queryProducts) {
+    throw new NotFoundError("No documents found");
+  }
+  res.status(StatusCodes.OK).json(queryProducts);
 };
+// Call this many times to be able to update usedUnits
+export const getRecipie = async (req, res) => {
+  const { prodId, ingredientId } = req.params;
+  const { size } = req.body;
 
-export const createProduct = async (req, res) => {
-  const { prodName, description, categoryId, sizePrices, ingredients } =
-    req.body;
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    // "category" should be and ID from the rendered form
-    // Ingredients should be a list
-    const createProd = { name: prodName, description: description };
-    const product = await Product.create([createProd], { session });
+  const result = Recipie.findOne({ product: prodId, ingredient: ingredientId });
+};
+export const createRecipie = async (req, res) => {
+  const { ingredient, size, units } = req.body;
+  const product = req.params.id;
+  const transaction = req.transaction;
 
-    // "sizePrices":[
-    //   {"size": "small", "price": 200},
-    //   {"size": "medium", "price": 250},
-    //   {"size": "large", "price": 300},
-    // ]
-    const prodSizePrices = await Promise.all(
-      sizePrices.map(async (item) => {
-        const createProdSize = {
-          product: product[0]._id,
-          size: item.size,
-          price: item.price,
-        };
-        return await ProductSize.create([createProdSize], { session });
-      })
+  const createProdIngredient = {
+    product: product,
+    ingredient: ingredient.id,
+    size: size,
+    units: units,
+  };
+  const result = await Recipie.create(createProdIngredient, {
+    session,
+  });
+  if (result) {
+    throw new CustomAPIError(
+      "An error ocurred during the creation of your ingredient list"
     );
+  }
+  transaction.commitTransaction();
+  res.status(StatusCodes.CREATED).json(result);
+};
+export const deleteRecipie = async (req, res) => {
+  const { action } = req.query;
+  const { prodId, ingredientId } = req.params;
+  switch (action) {
+    case "recipieIngredient":
+      break;
+    case "product":
+      break;
 
-    const createProdCategory = {
-      product: product[0]._id,
-      category: categoryId,
-    };
-    const productCategory = await ProductCategory.create([createProdCategory], {
-      session,
-    });
-
-    // Before creating the ingredients, we need to check if the category "hasSizes".
-    // If not, send only one quantity per-ingredient
-    // ALREADY DONE BY THE SCHEMA
-
-    //TODO: create loop ingredients' list
-    // "ingredients": [
-    //   { "id": 1, "quantity": [{small: 3, medium: 5, large: 6}] },
-    //   { "id": 2, "quantity": [{small: 3, medium: 5, large: 6}] },
-    //   { "id": 3, "quantity": [{small: 3, medium: 5, large: 6}] }
-    // ]
-
-    const category = await Category.findById(categoryId).catch((err) => {
-      throw new NotFoundError("Category not found");
-    });
-    if (!category) {
-      throw new NotFoundError("Category not found");
-    }
-
-    const ingredientsList = await Promise.all(
-      ingredients.map(async (ingredient) => {
-        if (category.hasSizes === "false") {
-          ingredient.quantity = ingredient.quantity.small;
-        }
-        const createProdIngredient = {
-          product: product[0]._id,
-          ingredient: ingredient.id,
-          quantity: ingredient.quantity,
-        };
-        return await ProductIngredient.create([createProdIngredient], {
-          session,
-        });
-      })
-    );
-
-    const data = {
-      product: product[0],
-      prodSizePrices: prodSizePrices.map((size) => size[0]),
-      productCategory: productCategory[0],
-      ingredientsList: ingredientsList.map((ingredient) => ingredient[0]),
-    };
-
-    res.status(StatusCodes.OK).json(data);
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-  } finally {
-    session.endSession();
+    default:
+      break;
   }
 };
-
-export const deleteProduct = async (req, res) => {
-  const deletedProduct = await Product.findByIdAndDelete(req.params.id);
-  if (!deletedProduct) {
-    throw new NotFoundError("Product was not found in the database");
-  }
-  res.status(StatusCodes.OK).send(deletedProduct);
-};
-
-export const updateProduct = async (req, res) => {
-  const { product, sizes, ingredients, category, categorySizes } = req.body;
-
-  const updatedObject = {};
-
-  if (product) {
-    updatedObject.product = await Product.findByIdAndUpdate(
-      req.params.id,
-      {
-        name: product.name,
-        description: product.description,
-      },
-      { new: true }
-    );
-    if (!updatedObject.product) {
-      throw new NotFoundError("No product was found with that ID");
-    }
-  }
-
-  //   const category = "5f9a35d33b39c9079c2b2f7a";
-  // const categorySizes = [
-  //   { name: "small", price: 4.99 },
-  //   { name: "medium", price: 6.99 },
-  //   { name: "large", price: 8.99 }
-  // ];
-
-  if (category) {
-    //get the category information
-    const newCategory = await Category.findById(category);
-    if (!newCategory) {
-      throw new NotFoundError("No category was found with that ID");
-    }
-    //get the old category information
-    const oldCategory = await ProductCategory.findOne({
-      product: req.params.id,
-    });
-    let categoryResult;
-    if (!oldCategory) {
-      await ProductCategory.create({
-        product: req.params.id,
-        category: category,
-      });
-      categoryResult = newCategory;
-    } else {
-      categoryResult = await Category.findById(oldCategory.category);
-    }
-    if (newCategory.hasSizes !== categoryResult.hasSizes) {
-      if (newCategory.hasSizes) {
-        //if the new category has sizes validate the sizes array
-        if (!Array.isArray(categorySizes) || categorySizes.length !== 3) {
-          throw new BadRequestError(
-            "Expected an array of 3 values for categorySizes property"
-          );
-        }
-      } else {
-        //if the new category doesn't have categorySizes validate the categorySizes array
-        if (!Array.isArray(categorySizes) || categorySizes.length !== 1) {
-          throw new BadRequestError(
-            "Expected only 1 'fixed' size for the categorySizes property"
-          );
-        }
-      }
-    }
-    updateCategorySizes(newCategory, req.params.id, categorySizes);
-    updatedObject.categories = await ProductCategory.updateOne(
-      { product: req.params.id },
-      { category: category },
-      { new: true }
-    );
-    console.log("updatedObject", updatedObject);
-    if (!updatedObject.categories) {
-      throw new NotFoundError(
-        "No product with that category was found in the Product category table"
-      );
-    }
-  }
-
-  async function updateCategorySizes(newCategory, productId, sizes) {
-    if (sizes) {
-      if (newCategory.hasSizes) {
-        //update sizes and prices for each size
-        await Promise.all(
-          sizes.map(async (size) => {
-            await ProductSize.updateOne(
-              { product: productId, size: size.name },
-              { $set: { price: size.price } }
-            );
-          })
-        );
-      } else {
-        //update only the fixed size
-        await ProductSize.updateOne(
-          { product: productId, size: "fixed" },
-          { $set: { price: sizes[0].price } }
-        );
-      }
-    }
-  }
-
-  // const sizes = [
-  //   { name: "small", price: 4.99 },
-  //   { name: "medium", price: 6.99 },
-  //   { name: "large", price: 8.99 }
-  // ];
-
-  const newSizes = [];
-  if (sizes) {
-    const productCategory = await ProductCategory.findById(req.params.id);
-    const category = await Category.findById(productCategory.category);
-    if (category.hasSizes) {
-      //validate the sizes array
-      if (!Array.isArray(sizes) || sizes.length !== 3) {
-        throw new BadRequestError(
-          "Expected an array of 3 values for sizes property"
-        );
-      }
-    } else {
-      //validate the sizes array
-      if (!Array.isArray(sizes) || sizes.length !== 1) {
-        throw new BadRequestError(
-          "Expected only 1 'fixed' size for the sizes property"
-        );
-      }
-    }
-    updateSizesAndPrices(category, req.params.id, sizes);
-  }
-
-  async function updateSizesAndPrices(category, productId, sizes) {
-    if (category.hasSizes) {
-      //update sizes and prices for each size
-      await Promise.all(
-        sizes.map(async (size) => {
-          await ProductSize.updateOne(
-            { product: productId, size: size.name },
-            { $set: { price: size.price } }
-          );
-        })
-      );
-    } else {
-      //update only the fixed size
-      await ProductSize.updateOne(
-        { product: productId, size: "fixed" },
-        { $set: { price: sizes[0].price } }
-      );
-    }
-  }
-  // if (sizes) {
-  //   const productCategory = ProductCategory.findById(req.params.id);
-  //   const category = Category.findById(productCategory.category);
-  //   updateSizesAndPrices(category , req.params.id, sizes)
-  // }
-  //   await Promise.all(sizes.map(async (size, price) => {
-  //     console.log("prices", price)
-  //     if(!price){
-  //       throw
-  //     }
-  //     if(size.fixed){
-  //       await ProductSize.deleteMany({product: req.params.id, size: {$in: ["small", "medium", "large"]}})
-  //     }
-  //     // if(Object.entries(size).forEach(([key, value]) => {key==="fixed"})){
-  //     //   await ProductSize.deleteMany({product: req.params.id, size: {$in: ["small", "medium", "large"]}})
-  //     // }
-  //     i
-  //   }))
-  //   updatedObject.size = await ProductSize.updateOne(
-  //     { product: req.params.id, size: size.size },
-  //     { size: size.price }
-  //   );
-  //   if (!updatedObject.size) {
-  //     throw new NotFoundError(
-  //       "Not found in Product size table. Check the product id or size you are correct"
-  //     );
-  //   }
-  // }
-
-  const newIngredientsArr = [];
-  if (ingredients) {
-    await Promise.all(
-      ingredients.map(async (ingredient) => {
-        if (!ingredient.original) {
-          throw new BadRequestError(
-            "ID of ingredient to update was not provided"
-          );
-        }
-        const setObject = {};
-        if (ingredient.new) {
-          setObject.ingredient = ingredient.new;
-        }
-        if (ingredient.quantities) {
-          setObject.quantity = ingredient.quantities;
-        }
-        const newIngredient = await ProductIngredient.findOneAndUpdate(
-          { product: req.params.id, ingredient: ingredient.original },
-          {
-            $set: setObject,
-          },
-          { new: true }
-        );
-        if (!newIngredient) {
-          throw new NotFoundError(
-            "No product with that ingredients was found in the Product ingredients table"
-          );
-        }
-        newIngredientsArr.push(newIngredient);
-      })
-    );
-  }
-  if (ingredients) {
-    updatedObject.ingredients = newIngredientsArr;
-  }
-  res.status(StatusCodes.OK).send(updatedObject);
-};
-
+export const updateRecipie = async (req, res) => {};
 /********************************* CATEGORIES *********************************/
 
 // Order panel categories cards + packages + extras
@@ -451,35 +350,27 @@ export const getCategory = async (req, res) => {
   res.status(StatusCodes.OK).json({ category });
 };
 export const createCategory = async (req, res) => {
-  const { name, hasSizes } = req.body;
-  if (!name || !hasSizes) {
+  const { name } = req.body;
+  if (!name) {
     throw new BadRequestError(
       "Please provide a name and check if the category has sizes"
     );
   }
-  const newCategory = {};
-  if (hasSizes) {
-    newCategory.hasSizes = hasSizes === "true" ? true : false;
-  }
   const category = await Category.create({
     name: name,
-    hasSizes: newCategory.hasSizes,
   });
 
   res.status(StatusCodes.OK).json({ category });
 };
 export const updateCategory = async (req, res) => {
-  const { name, hasSizes } = req.body;
+  const { name } = req.body;
 
-  if (!name || !hasSizes) {
-    throw new BadRequestError(
-      "You must provide a name and a hasSizes parameter"
-    );
+  if (!name) {
+    throw new BadRequestError("You must provide a name parameter");
   }
 
   const updateQuery = {
     name: name,
-    hasSizes: hasSizes === "true" ? true : false,
   };
 
   const updatedCategory = await Category.findByIdAndUpdate(
@@ -491,32 +382,10 @@ export const updateCategory = async (req, res) => {
 };
 
 export const deleteCategory = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const deletedCategory = await Category.findByIdAndDelete({
-      _id: req.params.id,
-    }).catch((err) => {
-      throw new NotFoundError("Category could not be found in database");
-    });
-    await ProductCategory.findOneAndDelete({
-      category: deletedCategory._id,
-    }).catch((err) => {
-      throw new NotFoundError("Category could not be found in database");
-    });
-    await PackageOption.deleteMany({
-      "categories.category": deletedCategory._id,
-    }).catch((err) => {
-      throw new NotFoundError("Category could not be found in database");
-    });
-    res.status(StatusCodes.OK).json({ deletedCategory });
-    session.commitTransaction();
-  } catch (error) {
-    session.abortTransaction();
-    next(error);
-  } finally {
-    session.endSession();
-  }
+  const deletedCategory = await Category.findByIdAndDelete({
+    _id: req.params.id,
+  });
+  res.status(StatusCodes.OK).json(deletedCategory);
 };
 
 /********************************* PACAKGES *********************************/
@@ -585,31 +454,27 @@ export const getPackageOption = async (req, res) => {
 //   price: 205 }
 
 export const createPackageOption = async (req, res) => {
-  const { name, price, categories } = req.body;
+  const { name, price, options } = req.body;
 
-  if (!name || !price || categories.length < 1) {
+  if (!name || !price || !options.length > 0) {
     throw new BadRequestError(
       "You need a name, a price and at least one option for your package"
     );
   }
 
-  categories.map((option) => {
+  const uniqueCategories = new Set();
+  options.map((option) => {
     if (!option.category || !option.size || !option.maxCount) {
       throw new BadRequestError(
-        "Please provide at least one category for your package option. As well as the size of the product and how many of each size"
+        "Please provide all of the three fields for your option"
       );
     }
-  });
-
-  const uniqueCategories = new Set();
-  categories.map((currentCategory) => {
-    const compoundKey = `${currentCategory.category}-${currentCategory.size}`;
+    const compoundKey = `${option.category}-${option.size}`;
     if (uniqueCategories.has(compoundKey)) {
       // The combination of category and size is not unique
       throw new BadRequestError(
         "The same size for the same category was introduced more than once. Please choose only one of your options"
       );
-      return;
     } else {
       uniqueCategories.add(compoundKey);
     }
@@ -618,81 +483,57 @@ export const createPackageOption = async (req, res) => {
   const createdPackage = await PackageOption.create({
     name: name,
     price: price,
-    categories: categories,
+    options: options,
   });
-  res.status(StatusCodes.OK).json(createdPackage);
+  res.status(StatusCodes.CREATED).json(createdPackage);
 };
 
-export const updatePackageOption = async (req, res, next) => {
-  const { id } = req.params;
-  const { name, price, categories } = req.body;
+export const updatePackageOption = async (req, res) => {
+  const id = req.params.id;
+  const { name, price, options } = req.body;
 
   // const updateObject = {
   //   name: "Package 1",
   //   price: 207,
-  //   categories: [
+  //   options: [
   //     { category: "new_category_id", size: "small", maxCount: 3 },
   //     { category: "new_category_id", size: "large", maxCount: 1 },
   //     { category: "new_category_id", size: "medium", maxCount: 4 },
   //   ],
   // };
-  try {
-    const updatePackage = {};
-    if (name) {
-      updatePackage.name = name;
-    }
-    if (price) {
-      updatePackage.price = price;
-    }
-    if (categories) {
-      const uniqueCategories = new Set();
-      categories.map((currentCategory) => {
-        const compoundKey = `${currentCategory.category}-${currentCategory.size}`;
-        if (uniqueCategories.has(compoundKey)) {
-          // The combination of category and size is not unique
-          throw new BadRequestError(
-            "The same size for the same category was introduced more than once. Please choose only one of your options"
-          );
-          return;
-        } else {
-          uniqueCategories.add(compoundKey);
-        }
-      });
-      try {
-        await Promise.all(
-          categories.map(async (option) => {
-            const category = await Category.findById(option.category);
-            console.log("category", category);
+  if (!name || !price || !options) {
+    throw BadRequestError(
+      "Please provide all the information of your updated resourse"
+    );
+  }
+  const updatePackage = {};
+  updatePackage.name = name;
+  updatePackage.price = price;
 
-            if (!category.hasSizes && option.size !== "fixed") {
-              throw new BadRequestError(
-                "One of the introduced categories doesn't have sizes but you included a size other than 'fixed'"
-              );
-            }
-          })
-        );
-      } catch (err) {
-        next(err);
-        return;
-      }
-      updatePackage.categories = categories;
-    }
-
-    const result = {};
-    if (updatePackage) {
-      result.productOptions = await PackageOption.updateOne(
-        { _id: id },
-        { $set: updatePackage },
-        { new: true }
+  const uniqueCategories = new Set();
+  options.map((option) => {
+    if (!option.category || !option.size || !option.maxCount) {
+      throw new BadRequestError(
+        "Please provide all of the three fields for your option"
       );
     }
+    const compoundKey = `${option.category}-${option.size}`;
+    if (uniqueCategories.has(compoundKey)) {
+      // The combination of category and size is not unique
+      throw new BadRequestError(
+        "The same size for the same category was introduced more than once. Please choose only one of your options"
+      );
+    } else {
+      uniqueCategories.add(compoundKey);
+    }
+  });
+  updatePackage.options = options;
 
-    result.upadtedOptions = [];
+  const result = await PackageOption.findByIdAndUpdate(id, updatePackage, {
+    new: true,
+  });
 
-    res.status(StatusCodes.OK).json(result);
-  } catch (err) {
-    next(err);
-  }
+  res.status(StatusCodes.OK).json(result);
 };
 // const option = {
 // option:{
@@ -843,33 +684,11 @@ Create another product above 'large'. If large boneless have 12 pieces, but cust
 Make a boneless product for that recipe (spiciy, lemmon pepper, etc) with 16 pieces and fixed size*/
 
 export const getAllExtras = async (req, res) => {
-  const extras = await Extras.find({});
-  extras.forEach((extra) => {
-    console.log(extra);
-  });
-  const data = await Promise.all(
-    extras.map(async (extra) => {
-      const extrasInfo = await InventoryItem.find({
-        _id: extra.ingredient,
-      }).select("name type unitOfMeasurement");
-      const result = {};
-      const { _id, ingredient, price, quantity, __v } = extra;
-      const { name, type, unitOfMeasurement } = extrasInfo[0];
-      return {
-        _id,
-        ingredient,
-        price,
-        quantity,
-        __v,
-        name,
-        type,
-        unitOfMeasurement,
-      };
-    })
-  );
-  // const extrasInfo = await InventoryItem.find({}).select(
-  //   "name unitOfMeasurement"
-  // );
+  const extras = await Extras.find({})
+    .populate("ingredient")
+    .select(
+      "-ingredient.currentLevel -ingredient.thresholdLevel -ingredient.type"
+    );
   res.status(StatusCodes.OK).json(data);
 };
 export const getExtra = async (req, res) => {

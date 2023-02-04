@@ -22,6 +22,11 @@ const ProductStatSchema = new mongoose.Schema({
       return !this.package && !this.product;
     },
   },
+  type: {
+    type: String,
+    required: true,
+    enum: ["product", "package", "extra"],
+  },
   yearlySalesTotal: {
     type: Number,
     required: true,

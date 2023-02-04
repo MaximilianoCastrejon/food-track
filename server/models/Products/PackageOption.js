@@ -11,7 +11,7 @@ const PackageOptionSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  categories: [
+  options: [
     {
       category: {
         type: mongoose.Schema.Types.ObjectId,
@@ -29,11 +29,6 @@ const PackageOptionSchema = new mongoose.Schema({
       },
     },
   ],
-
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
 });
 
 const PackageOption = mongoose.model("PackageOption", PackageOptionSchema);

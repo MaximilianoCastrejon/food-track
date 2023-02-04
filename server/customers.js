@@ -1,0 +1,122 @@
+export let customers = [
+  {
+    "firstName": "Ora",
+    "lastName": "Kshlerin",
+    "email": "Dariana.Abshire8@gmail.com",
+    "phone": "(363) 341-7208 x874",
+    "houseNumber": "983 O'Keefe Mill",
+    "streetName": "Beier Ford",
+    "county": "Borders",
+    "municipality": "Langworthboro",
+    "state": "Oklahoma",
+    "description": "Commodi molestiae expedita assumenda aliquid cumque aperiam omnis quidem."
+  },
+  {
+    "firstName": "Caterina",
+    "lastName": "Tromp",
+    "email": "Tom_Leuschke@hotmail.com",
+    "phone": "968-404-3917 x62311",
+    "houseNumber": "6444 Bria Viaduct",
+    "streetName": "Elsie Wells",
+    "county": "Avon",
+    "municipality": "Waldorf",
+    "state": "Maryland",
+    "description": "Voluptatibus unde tempora alias totam aliquid nemo."
+  },
+  {
+    "firstName": "Elza",
+    "lastName": "Lockman",
+    "email": "Devonte88@yahoo.com",
+    "phone": "1-743-810-6645",
+    "houseNumber": "00825 Cortney Inlet",
+    "streetName": "Lina Extensions",
+    "county": "Bedfordshire",
+    "municipality": "Roelcester",
+    "state": "Oklahoma",
+    "description": "Minima tempore minus perspiciatis enim tenetur sed aut ipsam nihil."
+  },
+  {
+    "firstName": "Martine",
+    "lastName": "Gutmann",
+    "email": "Brandon_Bogan@hotmail.com",
+    "phone": "313.696.4389 x15816",
+    "houseNumber": "1210 Balistreri Branch",
+    "streetName": "Wintheiser Divide",
+    "county": "Bedfordshire",
+    "municipality": "Kielworth",
+    "state": "Washington",
+    "description": "Corrupti voluptatibus inventore autem alias delectus."
+  },
+  {
+    "firstName": "Corene",
+    "lastName": "Funk",
+    "email": "Kendrick87@yahoo.com",
+    "phone": "1-414-951-4958",
+    "houseNumber": "708 Leslie Parkway",
+    "streetName": "Ebert Mountain",
+    "county": "Avon",
+    "municipality": "North Frank",
+    "state": "North Carolina",
+    "description": "Natus et velit omnis expedita recusandae."
+  },
+  {
+    "firstName": "Rossie",
+    "lastName": "Rosenbaum",
+    "email": "Meagan_Runolfsson26@hotmail.com",
+    "phone": "(523) 799-7802",
+    "houseNumber": "257 Konopelski Turnpike",
+    "streetName": "Erin Haven",
+    "county": "Buckinghamshire",
+    "municipality": "Zulaufborough",
+    "state": "Mississippi",
+    "description": "Sunt necessitatibus accusantium ea debitis delectus assumenda."
+  },
+  {
+    "firstName": "Flossie",
+    "lastName": "Fay",
+    "email": "Oren7@yahoo.com",
+    "phone": "1-745-408-7085",
+    "houseNumber": "600 Felipa Plaza",
+    "streetName": "Yolanda Locks",
+    "county": "Avon",
+    "municipality": "Daughertyside",
+    "state": "South Dakota",
+    "description": "Quasi est quae."
+  },
+  {
+    "firstName": "Nathaniel",
+    "lastName": "Schneider",
+    "email": "Alfreda.Botsford34@yahoo.com",
+    "phone": "713-761-2103 x6123",
+    "houseNumber": "50494 Blanche Hills",
+    "streetName": "Murazik Isle",
+    "county": "Borders",
+    "municipality": "Lesleyland",
+    "state": "Rhode Island",
+    "description": "Dolore ratione autem modi."
+  },
+  {
+    "firstName": "Norbert",
+    "lastName": "Romaguera",
+    "email": "Era_Fisher@hotmail.com",
+    "phone": "(583) 814-2650",
+    "houseNumber": "984 Ebert Common",
+    "streetName": "Pouros Shore",
+    "county": "Buckinghamshire",
+    "municipality": "Fort Orville",
+    "state": "Kentucky",
+    "description": "Et dignissimos atque nobis amet corrupti natus fugit molestiae."
+  },
+  {
+    "firstName": "Herbert",
+    "lastName": "Morar",
+    "email": "Madonna.Fritsch35@gmail.com",
+    "phone": "(844) 202-4001 x8277",
+    "houseNumber": "652 Felicita Wall",
+    "streetName": "Volkman Neck",
+    "county": "Bedfordshire",
+    "municipality": "Dietrichland",
+    "state": "Montana",
+    "description": "Ducimus accusantium accusamus alias exercitationem."
+  }
+]

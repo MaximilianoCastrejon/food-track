@@ -14,13 +14,17 @@ import mongoose from "mongoose";
 //   ],
 
 const SaleSchema = mongoose.Schema({
-  order: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
-  valueOfOrder: Number,
-  valueOfProducts: Number,
-  valueOfPackages: Number,
-  valueOfExtras: Number,
-  discount: Number,
+  order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
+  customer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Customer",
+    required: true,
+  },
+  valueOfOrder: { type: Number, required: true },
+  valueOfProducts: { type: Number, required: true },
+  valueOfPackages: { type: Number, required: true },
+  valueOfExtras: { type: Number, required: true },
+  discount: { type: Number, required: true },
   createdAt: { type: Date, default: Date.now() },
 });
 

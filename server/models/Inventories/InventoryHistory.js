@@ -3,7 +3,8 @@ import mongoose from "mongoose";
 // Daily registry
 
 // Items como refrescos o botellas de agua revendidos tienen ingrediente su propio nombre
-// waste and used
+// usedUnits pueden verse afectados por ordenes,
+// Front-end GET a list of products, ingredient, and size from Order. Find recipies units and update date's InventoryHistory
 const InventoryHistorySchema = mongoose.Schema(
   {
     item: {

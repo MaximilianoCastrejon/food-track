@@ -1,25 +1,25 @@
 import mongoose from "mongoose";
 
 const CustomerSchema = new mongoose.Schema({
-  name: {
+  firstName: {
     type: String,
     required: true,
+  },
+  lastName: {
+    type: String,
   },
   email: {
     type: String,
-    required: true,
-    unique: true,
   },
   phone: {
     type: String,
-    required: true,
   },
-  orders: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-    },
-  ],
+  houseNumber: Number,
+  streetName: String,
+  county: String,
+  municipality: String,
+  state: String,
+  description: String,
 });
 
 CustomerSchema.methods.addLoyaltyPoints = function (orderTotal) {
@@ -45,11 +45,17 @@ const LoyaltyTierSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  position: {
+    type: Number,
+    unique: Number,
+    min: 1,
+    required: true,
+  },
   minOrderValue: {
     type: Number,
     required: true,
   },
-  discountPercentage: {
+  discount: {
     type: Number,
     required: true,
   },

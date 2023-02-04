@@ -13,14 +13,6 @@ const CategorySchema = new mongoose.Schema({
       },
     },
   },
-  hasSizes: {
-    type: Boolean,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
 });
 
 const Category = mongoose.model("Category", CategorySchema);
