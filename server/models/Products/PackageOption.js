@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 const PackageOptionSchema = new mongoose.Schema({
   name: {
     type: String,
+    index: true,
     required: true,
   },
   price: {
@@ -16,11 +17,13 @@ const PackageOptionSchema = new mongoose.Schema({
       category: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Category",
+        index: true,
         required: true,
       },
       size: {
         type: String,
         enum: ["small", "medium", "large", "fixed"],
+        index: true,
         required: true,
       },
       maxCount: {
@@ -30,6 +33,11 @@ const PackageOptionSchema = new mongoose.Schema({
     },
   ],
 });
+
+PackageOptionSchema.index(
+  { name: 1, "options.category": 1, "options.size": 1 },
+  { unique: true }
+);
 
 const PackageOption = mongoose.model("PackageOption", PackageOptionSchema);
 export default PackageOption;

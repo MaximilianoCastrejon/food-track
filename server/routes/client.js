@@ -1,13 +1,12 @@
 import express from "express";
 import * as productController from "../controllers/client.js";
-import { productTransactionMiddleware } from "../middleware/postProduct.js";
 
 const router = express.Router();
 
 router
   .route("/products")
   .get(productController.getProducts)
-  .post(productTransactionMiddleware, productController.createProduct);
+  .post(productController.createProduct);
 router
   .route("/products/:id")
   .delete(productController.deleteProduct)
@@ -17,23 +16,23 @@ router
 router
   .route("/products/:id/prices")
   .get(productController.getPrices)
-  .post(productTransactionMiddleware, productController.createPrices);
-
+  .post(productController.createPrices)
+  .delete(productController.deletePrices);
 router
   .route("/products/:prodId/prices/:priceId")
-  .get(productController.getPrice)
-  .patch(productController.updatePrices)
-  .delete(productController.deletePrices);
+  .patch(productController.updatePrice)
+  .delete(productController.deletePrice);
 
 router
   .route("/products/:id/ingredients")
-  .get(productController.getAllRecipies)
-  .post(productTransactionMiddleware, productController.createRecipie);
+  .get(productController.getAllRecipes)
+  .post(productController.createRecipeIngredient)
+  .delete(productController.deleteRecipe);
 router
   .route("/products/:prodId/ingredients/:ingredientId")
-  .get(productController.getRecipie)
-  .patch(productController.updateRecipie)
-  .delete(productController.deleteRecipie);
+  .get(productController.getRecipeIngredient)
+  .patch(productController.updateRecipe)
+  .delete(productController.deleteRecipeIngredient);
 
 router
   .route("/packages")

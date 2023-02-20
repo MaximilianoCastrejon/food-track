@@ -1,4 +1,4 @@
-import { Product, ProductPrice, Recipie } from "../models/Products/Product.js";
+import { Product, ProductPrice, Recipe } from "../models/Products/Product.js";
 import ProductStat from "../models/Products/ProductStat.js";
 import Category from "../models/Products/Category.js";
 import { buildQuery } from "../utils/buildQuery.js";
@@ -20,7 +20,6 @@ export const getProducts = async (req, res) => {
     description,
     descriptionOptions,
     category,
-    categoryOptions,
     numericFilters,
     projection,
     sort,
@@ -30,6 +29,7 @@ export const getProducts = async (req, res) => {
 
   const queryObject = {};
   const numQuery = {};
+  const idFields = [];
   const structureQuery = {};
   /* Query params */
 
@@ -37,7 +37,6 @@ export const getProducts = async (req, res) => {
   const fields = [
     { name: "name", value: name, options: nameOptions },
     { name: "description", value: description, options: descriptionOptions },
-    { name: "category", value: category, options: categoryOptions },
   ];
 
   for (const field of fields) {
@@ -49,6 +48,9 @@ export const getProducts = async (req, res) => {
     }
   }
 
+  if (category) {
+    idFields.push({ id: category, fieldName: "category" });
+  }
   /* Structure */
   if (projection) {
     structureQuery.projection = projection;
@@ -70,6 +72,9 @@ export const getProducts = async (req, res) => {
     numQuery.numericFilters = numericFilters;
     numQuery.options = [];
   }
+  if (idFields.length !== 0) {
+    queryObject.idFields = idFields;
+  }
   if (Object.keys(numQuery).length !== 0) {
     queryObject.numQuery = numQuery;
   }
@@ -82,14 +87,12 @@ export const getProducts = async (req, res) => {
   // const totalDocuments = await Product.countDocuments();
   // const totalPages = Math.ceil(totalDocuments / pagination.limit);
 
-  res.status(StatusCodes.OK).json({
-    queryProducts,
-  });
+  res.status(StatusCodes.OK).json(queryProducts);
 };
 
 export const getProductById = async (req, res) => {
   const product = await Product.findById(req.params.id);
-  const ingredients = await Recipie.find({
+  const recipe = await Recipe.find({
     product: req.params.id,
   })
     .select("-product")
@@ -98,12 +101,18 @@ export const getProductById = async (req, res) => {
     "-product"
   );
 
-  res.status(StatusCodes.OK).send({ product, category, ingredients, prices });
+  if (!product || !recipe || !prices) {
+    throw new NotFoundError("Some data could not be retrieved");
+  }
+  res.status(StatusCodes.OK).json({ product, Recipe, prices });
 };
 
+// Create the product
+// Create prices
+// Create Recipe
+// Create prod stats
 export const createProduct = async (req, res) => {
   const { name, description, categoryId } = req.body;
-  const transaction = req.transaction;
   const result = {};
   // "category" should be and ID from the rendered form
   // Ingredients should be a list
@@ -117,8 +126,7 @@ export const createProduct = async (req, res) => {
     description: description,
     category: categoryId,
   };
-  result.product = await Product.create(createProd, { session });
-  transaction.commitTransaction();
+  result.product = await Product.create(createProd);
   res.status(StatusCodes.CREATED).json(result);
 };
 
@@ -134,7 +142,6 @@ export const updateProduct = async (req, res) => {
   const { name, description, category } = req.body;
 
   const updateProd = {};
-  const messages = {};
   if (name) {
     updateProd.name = name;
   }
@@ -144,21 +151,26 @@ export const updateProduct = async (req, res) => {
   if (category) {
     updateProd.category = category;
   }
-
-  const result = await Product.findByIdAndUpdate(req.params.id, updateProd, {
-    new: true,
-  });
-  if (!result.product) {
+  console.log(req.params.id);
+  const result = await Product.findByIdAndUpdate(
+    req.params.id,
+    { updateProd },
+    {
+      new: true,
+    }
+  );
+  if (!result) {
     throw new NotFoundError("No product was found with that ID");
   }
 
-  res.status(StatusCodes.OK).send(result);
+  res.status(StatusCodes.OK).json(result);
 };
 
 /********************************* PRODUCT PRICES *********************************/
 
 export const getPrices = async (req, res) => {
-  const { size, numericFilters } = req.body;
+  const { size, numericFilters, projection, sort, page, offset, populate } =
+    req.query;
   const product = req.params.id;
 
   const queryObject = {};
@@ -194,6 +206,10 @@ export const getPrices = async (req, res) => {
     numQuery.numericFilters = numericFilters;
     numQuery.options = ["price"];
   }
+  if (idFields.length !== 0) {
+    queryObject.idFields = idFields;
+  }
+
   if (Object.keys(numQuery).length !== 0) {
     queryObject.numQuery = numQuery;
   }
@@ -206,40 +222,55 @@ export const getPrices = async (req, res) => {
   if (!queryProducts) {
     throw new NotFoundError("No documents found");
   }
+  res.status(StatusCodes.OK).json(queryProducts);
 };
 
 export const createPrices = async (req, res) => {
-  const { size, price } = req.body;
+  const { prices } = req.body;
   const product = req.params.id;
-  const transaction = req.transaction;
-  // "prices":[
-  //   {"size": "small", "price": 200},
-  //   {"size": "medium", "price": 250},
-  //   {"size": "large", "price": 300},
+  // "productPrices":[
+  //   {"product": "63eaba002b31aac6376c3049", "prices":{"small": 30, "medium": 50, "large": 90}},
   // ]
-  if (!size || !price) {
-    throw new BadRequestError(
-      "Please provide both the size and price for the presentations of this product"
-    );
+
+  const priceData = [];
+  for (const [size, price] of Object.entries(prices)) {
+    let result = await ProductPrice.create({
+      product: product,
+      price: price,
+      size: size,
+    });
+    console.log("result", result);
+    priceData.push(result);
   }
-  const createProdSize = {
-    product: product,
-    size: size,
-    price: price,
-  };
-  const result = await ProductPrice.create(createProdSize, {
-    transaction,
-  });
 
-  transaction.commitTransaction();
-  res.status(StatusCodes.CREATED).json(result);
+  res.status(StatusCodes.CREATED).json(priceData);
 };
-export const deletePrices = async (req, res) => {};
-export const updatePrices = async (req, res) => {};
+export const deletePrices = async (req, res) => {
+  const prodId = req.params.id;
+  const deleted = await ProductPrice.deleteMany({ product: prodId });
+  res.status(StatusCodes.OK).json(deleted);
+};
+export const deletePrice = async (req, res) => {
+  const { prodId, priceId } = req.params;
+  const deleted = await ProductPrice.findByIdAndDelete(priceId).catch(() => {
+    throw new NotFoundError("No registry found with that ID");
+  });
+  res.status(StatusCodes.OK).json(deleted);
+};
+export const updatePrice = async (req, res) => {};
 
-/********************************* PRODUCT RECIPIE *********************************/
-export const getAllRecipies = async (req, res) => {
-  const { ingredient, size, numericFilters } = req.body;
+/********************************* PRODUCT RECIPE *********************************/
+export const getAllRecipes = async (req, res) => {
+  const {
+    ingredient,
+    size,
+    numericFilters,
+    projection,
+    sort,
+    page,
+    offset,
+    populate,
+  } = req.query;
   const product = req.params.id;
 
   const queryObject = {};
@@ -267,10 +298,13 @@ export const getAllRecipies = async (req, res) => {
   if (sort) {
     structureQuery.sort = sort;
   }
-
-  /* String and num objects to build query*/
-
+  if (populate) {
+    console.log("populate", populate);
+    structureQuery.populate = populate;
+  }
   if (stringParams.length > 0) {
+    /* String and num objects to build query*/
+
     queryObject.stringParams = stringParams;
   }
 
@@ -278,14 +312,14 @@ export const getAllRecipies = async (req, res) => {
     numQuery.numericFilters = numericFilters;
     numQuery.options = ["units"];
   }
+  if (idFields.length !== 0) {
+    queryObject.idFields = idFields;
+  }
+
   if (Object.keys(numQuery).length !== 0) {
     queryObject.numQuery = numQuery;
   }
-  const queryProducts = await buildQuery(
-    ProductPrice,
-    queryObject,
-    structureQuery
-  );
+  const queryProducts = await buildQuery(Recipe, queryObject, structureQuery);
 
   if (!queryProducts) {
     throw new NotFoundError("No documents found");
@@ -293,48 +327,94 @@ export const getAllRecipies = async (req, res) => {
   res.status(StatusCodes.OK).json(queryProducts);
 };
 // Call this many times to be able to update usedUnits
-export const getRecipie = async (req, res) => {
+export const getRecipeIngredient = async (req, res) => {
   const { prodId, ingredientId } = req.params;
   const { size } = req.body;
-
-  const result = Recipie.findOne({ product: prodId, ingredient: ingredientId });
-};
-export const createRecipie = async (req, res) => {
-  const { ingredient, size, units } = req.body;
-  const product = req.params.id;
-  const transaction = req.transaction;
-
-  const createProdIngredient = {
-    product: product,
-    ingredient: ingredient.id,
-    size: size,
-    units: units,
-  };
-  const result = await Recipie.create(createProdIngredient, {
-    session,
+  const queryObject = {};
+  if (size) {
+    queryObject.size = size;
+  }
+  const result = await Recipe.findOne({
+    product: prodId,
+    ingredient: ingredientId,
+    queryObject,
   });
-  if (result) {
+  res.status(StatusCodes.OK).json(result);
+};
+
+export const createRecipeIngredient = async (req, res) => {
+  const { ingredients } = req.body;
+  const product = req.params.id;
+  const recipePromises = ingredients.map(async (ingredient) => {
+    if (!validateObject(ingredient, ["id", "units"])) {
+      throw new BadRequestError(
+        "Please provide all of the fields required for every ingredient"
+      );
+    }
+    const recipeData = [];
+    for (const [size, value] of Object.entries(ingredient.units)) {
+      let result = await Recipe.create({
+        product: product,
+        ingredient: ingredient.id,
+        size: size,
+        units: value,
+      });
+      // console.log("result", result);
+      recipeData.push(result);
+    }
+    // console.log("recipeData", recipeData);
+    return recipeData;
+  });
+
+  function validateObject(obj, keys) {
+    return keys.every((key) => obj.hasOwnProperty(key) && obj[key]);
+  }
+
+  const resolvedPromises = await Promise.all(recipePromises);
+  res.status(StatusCodes.CREATED).json(resolvedPromises);
+};
+export const deleteRecipe = async (req, res) => {
+  const prodId = req.params.id;
+  await Recipe.deleteMany({ product: prodId }).catch((err) => {
     throw new CustomAPIError(
-      "An error ocurred during the creation of your ingredient list"
+      "An error ocurred during the deletion of your Recipe"
+    );
+  });
+  res.status(StatusCodes.OK).json({ msg: "Deletion Successful" });
+};
+export const deleteRecipeIngredient = async (req, res) => {
+  const { prodId, ingredientId } = req.params;
+  const deleted = await Recipe.findOneAndDelete({
+    product: prodId,
+    ingredient: ingredientId,
+  });
+  if (!deleted) {
+    throw new CustomAPIError(
+      "An error ocurred during the deletion of your Recipe"
     );
   }
-  transaction.commitTransaction();
-  res.status(StatusCodes.CREATED).json(result);
+  res.status(StatusCodes.OK).json(deleted);
 };
-export const deleteRecipie = async (req, res) => {
-  const { action } = req.query;
+export const updateRecipe = async (req, res) => {
+  const { size, units } = req.body;
   const { prodId, ingredientId } = req.params;
-  switch (action) {
-    case "recipieIngredient":
-      break;
-    case "product":
-      break;
-
-    default:
-      break;
+  const updateObject = {};
+  if (size) {
+    updateObject.size = size;
   }
+  if (units) {
+    updateObject.units = units;
+  }
+  const updated = await Recipe.findOneAndUpdate(
+    {
+      product: prodId,
+      ingredient: ingredientId,
+    },
+    { updateObject }
+  );
+  res.status(StatusCodes.OK).json(updated);
 };
-export const updateRecipie = async (req, res) => {};
+
 /********************************* CATEGORIES *********************************/
 
 // Order panel categories cards + packages + extras
@@ -374,7 +454,7 @@ export const updateCategory = async (req, res) => {
   };
 
   const updatedCategory = await Category.findByIdAndUpdate(
-    { _id: req.params.id },
+    req.params.id,
     updateQuery,
     { new: true }
   );
@@ -382,9 +462,11 @@ export const updateCategory = async (req, res) => {
 };
 
 export const deleteCategory = async (req, res) => {
-  const deletedCategory = await Category.findByIdAndDelete({
-    _id: req.params.id,
-  });
+  const deletedCategory = await Category.findByIdAndDelete(req.params.id).catch(
+    (err) => {
+      throw new CustomAPIError("Your category could not be deleted ");
+    }
+  );
   res.status(StatusCodes.OK).json(deletedCategory);
 };
 
@@ -442,6 +524,11 @@ export const getPackageOption = async (req, res) => {
   if (!foundPackage) {
     throw new NotFoundError("Package option not found");
   }
+  const queryExperiments = await PackageOption.findOne({
+    // _id: req.params.id,
+    "options.size": "fixed",
+  });
+  console.log("queryExperiments", queryExperiments.options);
   res.status(StatusCodes.OK).json(foundPackage);
 };
 
@@ -462,22 +549,22 @@ export const createPackageOption = async (req, res) => {
     );
   }
 
-  const uniqueCategories = new Set();
+  // const uniqueCategories = new Set();
   options.map((option) => {
     if (!option.category || !option.size || !option.maxCount) {
       throw new BadRequestError(
         "Please provide all of the three fields for your option"
       );
     }
-    const compoundKey = `${option.category}-${option.size}`;
-    if (uniqueCategories.has(compoundKey)) {
-      // The combination of category and size is not unique
-      throw new BadRequestError(
-        "The same size for the same category was introduced more than once. Please choose only one of your options"
-      );
-    } else {
-      uniqueCategories.add(compoundKey);
-    }
+    // const compoundKey = `${option.category}-${option.size}`;
+    // if (uniqueCategories.has(compoundKey)) {
+    //   // The combination of category and size is not unique
+    //   throw new BadRequestError(
+    //     "The same size for the same category was introduced more than once. Please choose only one of your options"
+    //   );
+    // } else {
+    //   uniqueCategories.add(compoundKey);
+    // }
   });
 
   const createdPackage = await PackageOption.create({
@@ -489,8 +576,8 @@ export const createPackageOption = async (req, res) => {
 };
 
 export const updatePackageOption = async (req, res) => {
-  const id = req.params.id;
-  const { name, price, options } = req.body;
+  const packageId = req.params.id;
+  const { /*name, price, updateOptions, whereOptions*/ packageData } = req.body;
 
   // const updateObject = {
   //   name: "Package 1",
@@ -501,40 +588,169 @@ export const updatePackageOption = async (req, res) => {
   //     { category: "new_category_id", size: "medium", maxCount: 4 },
   //   ],
   // };
-  if (!name || !price || !options) {
-    throw BadRequestError(
-      "Please provide all the information of your updated resourse"
-    );
-  }
-  const updatePackage = {};
-  updatePackage.name = name;
-  updatePackage.price = price;
+  // let updatePackage = {};
 
-  const uniqueCategories = new Set();
-  options.map((option) => {
-    if (!option.category || !option.size || !option.maxCount) {
-      throw new BadRequestError(
-        "Please provide all of the three fields for your option"
-      );
+  // if (name) {
+  //   updatePackage.name = name;
+  // }
+  // if (price) {
+  //   updatePackage.price = price;
+  // }
+  // const arrayFilters = [];
+  // if (updateOptions) {
+  //   if (!areArraysEqual(updateOptions, whereOptions)) {
+  //     throw new BadRequestError(
+  //       "Provide the same amount of updated objects as the amount of objects to update"
+  //     );
+  //   }
+
+  //   // const options = [];
+
+  //   // for (let i = 0; i < updateOptions.length; i++) {
+  //   //   options.push(`category${i}`);
+  //   //   for (let j = 0; j < m; j++) {
+  //   //     options.push(`size${j}`);
+  //   //     const result = `options.$[${options.join("].$[")}]`;
+  //   //     //"options.$[category1].$[size1]"
+  //   //     updatePackage = { ...updatePackage, result: updateOptions[i].size };
+  //   //     arrayFilters.push({ options: whereOptions[filter].category });
+  //   //     arrayFilters.push({ size1: whereOptions[filter].size });
+
+  //   //     console.log(result);
+  //   //     options.pop();
+  //   //   }
+  //   //   options.pop();
+  //   // }
+
+  //   const collection = PackageOption;
+  //   const documentId = packageId;
+  //   const arrayName = "options";
+  //   const updateSpecs = [
+  //     {
+  //       identifier: "$[size1].maxCount",
+  //       filter: { size: "small" },
+  //       updates: { maxCount: 2 },
+  //     },
+  //     {
+  //       identifier: "$[color2].stock",
+  //       filter: { color: "red" },
+  //       updates: { stock: 5 },
+  //     },
+  //   ];
+
+  //   await updateArrayOfObjects(collection, documentId, arrayName, updateSpecs)
+  //     .then((result) => {
+  //       console.log(result);
+  //     })
+  //     .catch((error) => {
+  //       console.error(error);
+  //     });
+
+  //   const updateArrayOfObjects = async (
+  //     collection,
+  //     documentId,
+  //     arrayName,
+  //     updateSpecs
+  //   ) => {
+  //     return collection.updateOne(
+  //       { _id: documentId },
+  //       {
+  //         $set: updateSpecs.reduce((acc, spec) => {
+  //           const { identifier, filter, updates } = spec;
+  //           acc[arrayName + "." + identifier] = {
+  //             $set: updates,
+  //           };
+  //           return acc;
+  //         }, {}),
+  //       },
+  //       {
+  //         arrayFilters: updateSpecs.map((spec) => {
+  //           const { identifier, filter } = spec;
+  //           return { [identifier]: filter };
+  //         }),
+  //       }
+  //     );
+  //   };
+
+  // const result = await Collection.updateMany(
+  //   {},
+  //   { $set: update },
+  //   { arrayFilters: update.arrayFilters }
+  // );
+
+  // { arrayFilters: [
+  //   { "category1": "0as98d09as09b0dfb09s8df09" },
+  //   { "size": "small" } ] }
+
+  //   "options.$[category2].$[size]": "small"
+  //   { arrayFilters: [
+  //     { "category2": "0s9hs80df789f6709dgn7689" },
+  //     { "size": "medium" } ] }
+
+  //     "options.$[category1].$[size].maxCount": 2
+  //     { arrayFilters: [
+  //       { "category1": "0as98d09as09b0dfb09s8df09" },
+  //       { "size": "small" } ] }
+  //     "options.$[category2].$[size].maxCount": 4
+  //     { arrayFilters: [
+  //       { "category2": "0s9hs80df789f6709dgn7689" },
+  //       { "size": "medium" } ] }
+  // }
+
+  // const uniqueCategories = new Set();
+  // options.map((option) => {
+  //   if (!option.category || !option.size || !option.maxCount) {
+  //     throw new BadRequestError(
+  //       "Please provide all of the three fields for your option"
+  //     );
+  //   }
+  //   const compoundKey = `${option.category}-${option.size}`;
+  //   if (uniqueCategories.has(compoundKey)) {
+  //     // The combination of category and size is not unique
+  //     throw new BadRequestError(
+  //       "The same size for the same category was introduced more than once. Please choose only one of your options"
+  //     );
+  //   } else {
+  //     uniqueCategories.add(compoundKey);
+  //   }
+  // });
+  // updatePackage.options = options;
+
+  const result = await PackageOption.findByIdAndUpdate(
+    packageId,
+    { $set: packageData },
+    {
+      new: true,
     }
-    const compoundKey = `${option.category}-${option.size}`;
-    if (uniqueCategories.has(compoundKey)) {
-      // The combination of category and size is not unique
-      throw new BadRequestError(
-        "The same size for the same category was introduced more than once. Please choose only one of your options"
-      );
-    } else {
-      uniqueCategories.add(compoundKey);
-    }
+  ).catch((err) => {
+    console.log(err);
   });
-  updatePackage.options = options;
-
-  const result = await PackageOption.findByIdAndUpdate(id, updatePackage, {
-    new: true,
-  });
-
+  console.log(packageData);
   res.status(StatusCodes.OK).json(result);
 };
+
+const areArraysEqual = (array1, array2) => {
+  if (array1.length !== array2.length) {
+    return false;
+  }
+  for (let i = 0; i < array1.length; i++) {
+    const obj1 = array1[i];
+    const obj2 = array2[i];
+    const obj1Keys = Object.keys(obj1);
+    const obj2Keys = Object.keys(obj2);
+    if (obj1Keys.length !== obj2Keys.length) {
+      return false;
+    }
+    for (let j = 0; j < obj1Keys.length; j++) {
+      const key = obj1Keys[j];
+      if (!obj2.hasOwnProperty(key) || obj1[key] !== obj2[key]) {
+        return false;
+      }
+    }
+  }
+  return true;
+};
+
 // const option = {
 // option:{
 //   category: "63b1a51b374461ccaea1d494",

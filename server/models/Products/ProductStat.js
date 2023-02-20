@@ -35,6 +35,10 @@ const ProductStatSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  year: {
+    type: Number,
+    required: true,
+  },
   monthlyData: [
     {
       month: {

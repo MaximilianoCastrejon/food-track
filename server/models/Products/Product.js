@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { NotFoundError } from "../../errors/not-found.js";
 import InventoryItem from "../Inventories/InventoryItem.js";
 import InventoryType from "../Inventories/InventoryType.js";
+import ProductStat from "./ProductStat.js";
 
 const ProductSchema = new mongoose.Schema(
   {
@@ -37,11 +38,13 @@ const ProductPriceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
+    index: true,
   },
   size: {
     type: String,
     enum: ["small", "medium", "large", "fixed"],
     required: true,
+    index: true,
   },
   price: {
     type: Number,
@@ -50,18 +53,18 @@ const ProductPriceSchema = new mongoose.Schema({
 });
 
 // Inventory updating
-const RecipieSchema = new mongoose.Schema({
+const RecipeSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Product",
     required: true,
-    unique: true,
+    index: true,
   },
   ingredient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "InventoryItem",
     required: true,
-    unique: true,
+    index: true,
     validate: {
       validator: async function (id) {
         const item = await InventoryItem.findById(id).populate("type");
@@ -77,7 +80,7 @@ const RecipieSchema = new mongoose.Schema({
   size: {
     type: String,
     enum: ["small", "medium", "large", "fixed"],
-    unique: true,
+    index: true,
     required: true,
   },
   units: {
@@ -85,6 +88,9 @@ const RecipieSchema = new mongoose.Schema({
     required: true,
   },
 });
+
+RecipeSchema.index({ product: 1, ingredient: 1, size: 1 }, { unique: true });
+ProductPriceSchema.index({ product: 1, size: 1 }, { unique: true });
 
 // If name + category + recipe || category + recipe were used as PK
 // We should always make 3 , 1 for each size. Errors can happen
@@ -158,12 +164,26 @@ const RecipieSchema = new mongoose.Schema({
 //   },
 // });
 
-ProductSchema.pre("remove", async function () {
+ProductSchema.pre("deleteMany", async function (next) {
   await ProductPrice.deleteMany({ product: this._id });
-  await Recipie.deleteMany({ product: this._id });
+  await Recipe.deleteMany({ product: this._id });
+  await ProductStat.deleteOne({ product: this._id });
+  next();
+});
+ProductSchema.pre("deleteOne", async function (next) {
+  await ProductPrice.deleteMany({ product: this._id });
+  await Recipe.deleteMany({ product: this._id });
+  await ProductStat.deleteOne({ product: this._id });
+  next();
+});
+ProductSchema.pre("findOneAndDelete", async function (next) {
+  await ProductPrice.deleteMany({ product: this._id });
+  await Recipe.deleteMany({ product: this._id });
+  await ProductStat.deleteOne({ product: this._id });
+  next();
 });
 
 const Product = mongoose.model("Product", ProductSchema);
 const ProductPrice = mongoose.model("ProductPrice", ProductPriceSchema);
-const Recipie = mongoose.model("Recipie", RecipieSchema);
-export { Product, ProductPrice, Recipie };
+const Recipe = mongoose.model("Recipe", RecipeSchema);
+export { Product, ProductPrice, Recipe };
