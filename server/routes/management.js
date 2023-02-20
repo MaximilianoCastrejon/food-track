@@ -16,18 +16,15 @@ router
 //GET info from all registires or one
 router
   .route("/inventory/history/registries")
-  .get(managementController.getAllInventoryHistory);
+  .get(managementController.getAllInventoryHistory)
+  .post(managementController.createInventoryHistory)
+  .delete(managementController.deleteInventoryHistoryItem);
 router
   .route("/inventory/history/registries/:id")
   .get(managementController.getInventoryHistory)
-  .patch(managementController.updateInventoryHistory);
+  .patch(managementController.updateInventoryHistory)
+  .delete(managementController.deleteInventoryHistory);
 // I dont need to access or query all registries at once
-router
-  .route("/inventory/history/items/")
-  .post(managementController.createInventoryHistoryItem);
-router
-  .route("/inventory/history/items/:id")
-  .delete(managementController.deleteInventoryHistoryItem);
 
 router
   .route("/inventory/types")
@@ -40,11 +37,12 @@ router
   .get(managementController.getInventoryType);
 
 router
-  .route("/stats/")
+  .route("/product-stats/")
   .get(managementController.getAllProductStats)
-  .post(managementController.createProductStat);
+  .post(managementController.createProductStat)
+  .delete(managementController.deleteProductStats);
 router
-  .route("/stats/:id")
+  .route("/product-stats/:prodId")
   .get(managementController.getItemProductStats)
   .patch(/* From orders */)
   .delete(/* Entire item registry */);
