@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
+import { Expense } from "../Accounting/Expenses.js";
+import InventoryHistory from "../Inventories/InventoryHistory.js";
 import InventoryItem from "../Inventories/InventoryItem.js";
 import Extras from "../Products/Extras.js";
-import { Product, Recipie } from "../Products/Product.js";
+import PackageOption from "../Products/PackageOption.js";
+import { Product, ProductPrice, Recipe } from "../Products/Product.js";
 
 // TODO: add packages
 const OrderSchema = new mongoose.Schema(
@@ -27,7 +30,7 @@ const OrderSchema = new mongoose.Schema(
         },
         excludedIngredients: {
           type: [mongoose.Schema.Types.ObjectId],
-          ref: "Recipie",
+          ref: "Recipe",
         },
       },
     ],
@@ -61,7 +64,7 @@ const OrderSchema = new mongoose.Schema(
                 },
                 excludedIngredients: {
                   type: [mongoose.Schema.Types.ObjectId],
-                  ref: "Recipie",
+                  ref: "Recipe",
                 },
               },
             ],
@@ -70,22 +73,6 @@ const OrderSchema = new mongoose.Schema(
             type: Number,
             default: 0,
             required: true,
-          },
-          excludedIngredients: {
-            type: [mongoose.Schema.Types.ObjectId],
-            ref: "InventoryItem",
-            validate: {
-              validator: async function (id) {
-                // Check that the name field of each excluded ingredient is equal to "ingredient"
-                const excludedIngredients = await InventoryItem.find({
-                  _id: { $in: id },
-                  name: "ingredient",
-                });
-                return excludedIngredients.length === id.length;
-              },
-              message:
-                "One or more of the excluded ingredients does not have a name equal to 'ingredient'",
-            },
           },
         },
       ],
@@ -107,185 +94,129 @@ const OrderSchema = new mongoose.Schema(
 
 export const ExcludedIngredientsSchema = mongoose;
 
-// OrderSchema.pre("save", async function (next) {
-//   // Get the product associated with this order
-//   const product = await Product.findById(this.product);
+// Validate products have category and don't exceed maxCount
 
-//   // Adapt to data structure
-//   // Decrement the inventory levels of each ingredient in the product by the quantity of the order
-//   for (const ingredient of product.ingredients) {
-//     await RawIngredient.findByIdAndUpdate(ingredient._id, {
-//       $inc: { quantity: -ingredient.quantity * this.quantity },
-//     });
-//   }
-
-//   next();
-// });
-
-/* Decrease "small" quantity of each ingredient of each product and decrease ingredients by quantity of "extras" */
-// TODO: test performance. If bad, move non-frenquent updated data logic to updating route
-// OrderSchema.pre("save", async function (next) {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-//   try {
-//     // Decrement the inventory levels of each ingredient in each product in the order by the quantity of the order
-//     for (const product of this.products) {
-//       // Find the Recipie document for the current product in the order
-//       const dbRecipie = await Recipie.findOne({
-//         product: product.product,
-//       });
-//       if (!dbRecipie) continue;
-//       console.log("dbRecipie", dbRecipie);
-//       // Decrement the inventory levels of the ingredient in the product by the quantity of the product in the order
-//       // await RawIngredient.findByIdAndUpdate(dbRecipie.ingredient, {
-//       //   $inc: {
-//       //     // TODO: Decide on the ingredient quantities structure. Default to small or check in product category if hasSisez to use "fixed"
-//       //     quantity: -dbRecipie.quantity.small * product.quantity,
-//       //   },
-//       // });
-//     }
-
-//     // Decrement the inventory levels of each extra in the order by its quantity
-//     for (const extra of this.extras) {
-//       const extraDoc = await Extras.findById(extra);
-//       if (!extraDoc) continue;
-
-//       console.log("extraDoc", extraDoc);
-//       if (extraDoc.productId) {
-//         // Find the Recipie document for the extra
-//         const dbRecipie = await Recipie.findOne({
-//           product: extraDoc.productId,
-//         });
-
-//         // Decrement the inventory levels of the ingredient in the product by the quantity of the extra multiplied by the small value in the product ingredient
-//         // await RawIngredient.findByIdAndUpdate(dbRecipie.ingredient, {
-//         //   $inc: {
-//         //     quantity: -dbRecipie.quantity.small * extraDoc.quantity,
-//         //   },
-//         // });
-//       } else if (extraDoc.ingredientId) {
-//         // Decrement the inventory levels of the ingredient extra by its quantity
-//         await RawIngredient.findByIdAndUpdate(extraDoc.ingredientId, {
-//           $inc: { quantity: -extraDoc.quantity },
-//         });
-//       }
-//     }
-//     // middleware function 1 goes here
-//     next();
-//     await session.commitTransaction();
-//   } catch (error) {
-//     await session.abortTransaction();
-//     throw error;
-//   } finally {
-//     session.endSession();
-//   }
-// });
-
-/*Update/create product daily stats */
-// TODO: Add next.
-// TODO: Update to increase sales by "packages" and "extras"
+// Update inventory (products & packages)
 OrderSchema.pre("save", async function (next) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const order = this;
-
-    for (const product of order.products) {
-      const dbProduct = await Product.findById(product.product);
-      if (!dbProduct) continue;
-      // Calculate the total sales in cash for the product
-      const totalSalesCash = dbProduct.price * product.quantity;
-      console.log("totalSalesCash", totalSalesCash);
-
-      // Calculate the total sales in units for the product
-      const totalSalesUnits = product.quantity;
-      console.log("totalSalesUnits", totalSalesUnits);
-
-      // Check if the store was open on the day of the order
-      const storeOpen = checkStoreOpen(order.createdAt);
-      console.log("storeOpen", storeOpen);
-
-      // Update the ProductStats document for the product
-      // await ProductStats.updateOne(
-      //   {
-      //     productId: product.product,
-      //     year: order.createdAt.getFullYear(),
-      //   },
-      //   {
-      //     $inc: {
-      //       yearlySalesTotal: totalSalesCash,
-      //       yearlyTotalSoldUnits: totalSalesUnits,
-      //       "monthlyData.$.totalSales": totalSalesCash,
-      //       "monthlyData.$.totalUnits": totalSalesUnits,
-      //       "dailyData.$.totalSales": totalSalesCash,
-      //       "dailyData.$.totalUnits": totalSalesUnits,
-      //     },
-      //     $set: {
-      //       "monthlyData.$.month": order.createdAt.getMonth() + 1,
-      //       "dailyData.$.date": order.createdAt,
-      //       "dailyData.$.storeOpen": storeOpen,
-      //     },
-      //   },
-      //   { upsert: true }
-      // );
+  const packageProducts = [
+    ...this.packages.map((option) => {
+      option.packageProducts.map((product) => {
+        return (product.quantity *= option.quantity);
+      });
+      return option.packageProducts;
+    }),
+  ];
+  const productList = [...this.products, ...packageProducts];
+  for (const product of productList) {
+    const recipe = await Recipe.find({
+      product: product.product,
+      size: product.size,
+    });
+    for (const ingredient of recipe) {
+      const excluded = new Map(
+        product.excludedIngredients.map((id) => {
+          return id;
+        })
+      );
+      if (!excluded.has(ingredient.ingredient)) {
+        await InventoryHistory.findOneAndUpdate(
+          { item: ingredient.ingredient, createdAt: this.createdAt },
+          { $inc: { unitsUsed: -ingredient.units * product.quantity } }
+        );
+        await InventoryItem.findByIdAndUpdate(ingredient._id, {
+          $inc: { currentLevel: -ingredient.units * product.quantity },
+        });
+      }
     }
-    next();
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+    // const price = await ProductPrice.findOne({
+    //   product: product.product,
+    //   size: product.size,
+    // });
   }
+  next();
 });
 
-const addExcludedIngredientsBackToInventory = async (order) => {
-  for (const orderItem of order) {
-    if (!orderItem || orderItem.length === 0) continue;
-    const { excludedIngredients } = orderItem.excludedIngredients;
-    console.log(excludedIngredients);
-    // if (!excludedIngredients || excludedIngredients.length === 0) continue;
-
-    // Find the product document for the current product in the order
-    // const ingredient_qty_list = await Recipie.find({
-    //   product: orderItem.product,
-    // }).select(`ingredient quantity.${orderItem.size}`);
-    // // TODO: Handle error if product wasn't found
-    // if (!ingredientList) continue;
-
-    // // Find the ingredients that were excluded from the product
-    // const excludedIngredientObjects = ingredient_qty_list.filter((ingredient) =>
-    //   excludedIngredients.includes(ingredient.ingredient)
-    // );
-    // console.log(excludedIngredientObjects);
-    // // Add the excluded ingredients back to the inventory
-    // for (const ingredient of excludedIngredientObjects) {
-    //   await RawIngredient.findOneAndUpdate(
-    //     { _id: ingredient.ingredient },
-    //     { $inc: { quantity: ingredient.quantity } }
-    //   );
-    // }
+OrderSchema.methods.updateInventory = async function (cb) {
+  const packageProducts = [
+    ...this.packages.map((option) => {
+      option.packageProducts.map((product) => {
+        return (product.quantity *= option.quantity);
+      });
+      return option.packageProducts;
+    }),
+  ];
+  const productList = [...this.products, ...packageProducts];
+  for (const product of productList) {
+    const recipe = await Recipe.find({
+      product: product.product,
+      size: product.size,
+    });
+    for (const ingredient of recipe) {
+      const excluded = new Map(
+        product.excludedIngredients.map((id) => {
+          return id;
+        })
+      );
+      if (!excluded.has(ingredient.ingredient)) {
+        const ingredientName = await InventoryItem.findById(
+          ingredient.ingredient
+        );
+        const expenses = await Expense.find({
+          sourceName: ingredientName.name,
+          createdAt: this.createdAt,
+        }).select("units");
+        let unitsPurchased = 0;
+        if (expenses) {
+          unitsPurchased = expenses.reduce((acc, expense) => {
+            return (acc += expense.units);
+          }, 0);
+        }
+        const invRegistry = await InventoryHistory.findOneAndUpdate(
+          { item: ingredient.ingredient, createdAt: this.createdAt },
+          {
+            $inc: {
+              unitsUsed: ingredient.units * product.quantity,
+              endingInventory: -ingredient.units * product.quantity,
+            },
+          }
+        );
+        let inventoriesMarginalChange = 0;
+        if (!invRegistry) {
+          this.createdAt;
+          const prevRegistry = await InventoryHistory.findOne({
+            item: ingredient.ingredient,
+            createdAt: { $lt: this.createdAt },
+          });
+          const newRegistry = await InventoryHistory.create({
+            item: ingredient.ingredient,
+            createdAt: this.createdAt,
+            beginningInventory: prevRegistry?.endingInventory,
+            unitsUsed: ingredient.units * product.quantity,
+            endingInventory:
+              prevRegistry?.endingInventory -
+              ingredient.units * product.quantity,
+          });
+          inventoriesMarginalChange =
+            prevRegistry?.endingInventory - newRegistry.endingInventory;
+        }
+        await InventoryHistory.updateMany(
+          { item: ingredient.ingredient, createdAt: { $gt: this.createdAt } },
+          {
+            $inc: {
+              beginningInventory: inventoriesMarginalChange,
+              endingInventory: inventoriesMarginalChange,
+            },
+          }
+        );
+        const invItem = await InventoryItem.findByIdAndUpdate(ingredient._id, {
+          $inc: { currentLevel: -ingredient.units * product.quantity },
+        });
+      }
+    }
   }
 };
 
-OrderSchema.pre("save", async function (next) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  // Add the excluded ingredients back to the inventory
-  try {
-    addExcludedIngredientsBackToInventory(this.products);
-    addExcludedIngredientsBackToInventory(this.packages);
-    next();
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-});
+OrderSchema.methods.updateSales;
 
 // Updates customer loyalty tier with each new order with their ID
 // TODO: decide if I neew to do this as middleware or calculate it in route with addLoyaltyPoints CustomerSchema method
